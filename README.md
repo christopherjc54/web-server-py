@@ -1,5 +1,7 @@
 # Python Database Interface Server
 
+HTTP/S interface for database access.
+
 ## GET Request ##
 Any GET request will return a list of all usernames and passwords in the form they were initially sent to the server.
 
