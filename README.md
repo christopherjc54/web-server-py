@@ -37,3 +37,9 @@ Any GET request will return a list of all usernames and passwords in the form th
     - action
     - username
     - passwordHash
+- ```DeleteAccount```
+  - deletes account that's already been authenticated
+  - POST form-data keys
+    - action
+    - username
+    - passwordHash
