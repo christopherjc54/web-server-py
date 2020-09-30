@@ -48,6 +48,7 @@ def remove_user_account(username):
         (username,)
     )
     db.commit()
+    cursor.execute("CALL CleanMessages();")
 
 def get_all_accounts():
     cursor.execute("SELECT * FROM Account;")
@@ -74,10 +75,9 @@ def validate_login(username, password_hash):
             if db_username == username and db_hash == salted_hash:
                 return True
         print("error: \"" + username + "\" tried logging in with wrong password")
-        return False
     else:
         print("error: \"" + username + "\" not found found when validating login")
-        return False
+    return False
 
 def create_session(username, datetime_offset=datetime.timedelta(days=1, hours=0)):
     sessionID = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(32))
@@ -129,19 +129,19 @@ def test_session(username):
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
     print("sessionID:", sessionID)
-    print("expDateTime:", result)
+    print("expDateTime:", result[0][0])
     print("valid session?", validate_session(username, sessionID))
 
     update_session(sessionID, datetime.timedelta(days=2))
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
-    print("expDateTime:", result)
+    print("expDateTime:", result[0][0])
     print("valid session?", validate_session(username, sessionID))
 
     update_session(sessionID, datetime.timedelta(days=-5))
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
-    print("expDateTime:", result)
+    print("expDateTime:", result[0][0])
     print("valid session?", validate_session(username, sessionID))
 
     delete_session(sessionID)
