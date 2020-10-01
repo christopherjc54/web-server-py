@@ -39,15 +39,15 @@ CREATE TABLE `Message` (                    -- doesn't have foreign keys on user
     UNIQUE (`id`)
 );
 
-DROP PROCEDURE IF EXISTS `CleanMessages`;
+DROP PROCEDURE IF EXISTS `DeleteOrphanMessages`;
 DELIMITER $$ ;
-CREATE PROCEDURE `CleanMessages`()
+CREATE PROCEDURE `DeleteOrphanMessages`(
+    IN sp_username VARCHAR(15)             -- optimizes deletion...maybe, might need to use more complex logic
+)
 BEGIN
     DELETE m
     FROM Message m
-    LEFT JOIN Account a
-    ON m.fromUsername = a.username
-    OR m.toUsername = a.username
-    WHERE a.username IS NULL;
+    LEFT JOIN Account a ON m.fromUsername = a.username OR m.toUsername = a.username
+    WHERE (m.fromUsername = sp_username OR m.toUsername = sp_username) AND a.username IS NULL;
 END$$
 DELIMITER ; $$
