@@ -7,6 +7,10 @@ import mysql.connector
 import random, string
 import hashlib
 import datetime
+import logging
+import json
+
+encoding = "utf-8"
 
 def add_user_account(username, original_password, plain_text=True):
     salt = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(16))
@@ -22,33 +26,46 @@ def add_user_account(username, original_password, plain_text=True):
         )
         db.commit() ## would need exception check and db.rollback() if one of many commits fail (ACID property)
     except mysql.connector.IntegrityError: ## used for duplicate key and foreign key constraint errors
-        print("error: user \"" + username + "\" already exists")
+        logging.error("user \"" + username + "\" already exists")
         return False
     except mysql.connector.Error as e:
-        print("Error Code: " + str(e.errno))
-        print("SQL State: " + str(e.sqlstate))
-        print("Message: " + e.msg)
+        logging.critical("Error Code: " + str(e.errno))
+        logging.critical("SQL State: " + str(e.sqlstate))
+        logging.critical("Message: " + e.msg)
         raise e
 
     print()
-    print("Added new account to database:")
-    print("  Username: " + username)
-    print("  Password: " + original_password)
+    logging.debug("Added new account to database:")
+    logging.debug("  Username: " + username)
+    logging.debug("  Password: " + original_password)
     if plain_text:
-        print("  Hashed Password: " + hashed_password)
-    print("  Salt: " + salt)
-    print("  Hash: " + hash)
+        logging.debug("  Hashed Password: " + hashed_password)
+    logging.debug("  Salt: " + salt)
+    logging.debug("  Hash: " + hash)
     print()
 
     return True
 
 def remove_user_account(username):
-    cursor.execute(
-        "DELETE FROM Account WHERE username = %s;",
-        (username,)
-    )
-    db.commit()
-    cursor.execute("CALL CleanMessages();")
+    try:
+        cursor.execute(
+            "DELETE FROM Session WHERE username = %s;",
+            (username,)
+        )
+        cursor.execute(
+            "DELETE FROM Account WHERE username = %s;",
+            (username,)
+        )
+        cursor.execute(
+            "CALL DeleteOrphanMessages(%s);",
+            (username,)
+        )
+        db.commit()
+        return True
+    except mysql.connector.Error as e:
+        logging.critical(e.msg)
+        db.rollback()
+    return False
 
 def get_all_accounts():
     cursor.execute("SELECT * FROM Account;")
@@ -63,7 +80,7 @@ def get_all_accounts():
     else:
         return "no accounts found"
 
-def validate_login(username, password_hash):
+def validate_credentials(username, password_hash):
     cursor.execute(
         "SELECT (username, salt, hash) FROM Account WHERE username = %s;",
         (username,)
@@ -74,9 +91,9 @@ def validate_login(username, password_hash):
             salted_hash = hashlib.sha256(password_hash.encode() + db_salt.encode()).hexdigest()
             if db_username == username and db_hash == salted_hash:
                 return True
-        print("error: \"" + username + "\" tried logging in with wrong password")
+        logging.error("\"" + username + "\" tried logging in with wrong password")
     else:
-        print("error: \"" + username + "\" not found found when validating login")
+        logging.error("user \"" + username + "\" not found")
     return False
 
 def create_session(username, datetime_offset=datetime.timedelta(days=1, hours=0)):
@@ -100,11 +117,11 @@ def validate_session(username, sessionID):
             if(db_expDateTime > datetime.datetime.now()):
                 return True
             else:
-                print("deleting an expired session for \"" + username + "\"")
+                logging.info("deleting an expired session for \"" + username + "\"")
                 delete_session(db_sessionID)
-        print("error: all sessions for \"" + username + "\" expired")
+        logging.error("all sessions for \"" + username + "\" expired")
     else:
-        print("error: session not found")
+        logging.error("session not found")
     return False
 
 def update_session(sessionID, datetime_offset=datetime.timedelta(days=1, hours=0)):
@@ -128,35 +145,32 @@ def test_session(username):
     sessionID = create_session(username)
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
-    print("sessionID:", sessionID)
-    print("expDateTime:", result[0][0])
-    print("valid session?", validate_session(username, sessionID))
+    logging.debug("sessionID: " + sessionID)
+    logging.debug("expDateTime: " + str(result[0][0]))
+    logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
     update_session(sessionID, datetime.timedelta(days=2))
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
-    print("expDateTime:", result[0][0])
-    print("valid session?", validate_session(username, sessionID))
+    logging.debug("expDateTime: " + str(result[0][0]))
+    logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
     update_session(sessionID, datetime.timedelta(days=-5))
     cursor.execute(expDateTimeSQL, (sessionID,))
     result = cursor.fetchall()
-    print("expDateTime:", result[0][0])
-    print("valid session?", validate_session(username, sessionID))
+    logging.debug("expDateTime: " + str(result[0][0]))
+    logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
     delete_session(sessionID)
-    print("valid session?", validate_session(username, sessionID))
-
-    print()
-    input("Press any key to continue...")
-    print()
+    logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
+    ## still need to do something with this, preferably not compromise the entire system XD
     def do_GET(self):
-        self.send_response_only(200)
+        self.send_response_only(200) ## OK
         self.end_headers()
-        self.wfile.write(bytes(get_all_accounts(), "utf-8"))
+        self.wfile.write(bytes(get_all_accounts(), encoding))
 
     def do_POST(self):
         form = cgi.FieldStorage(
@@ -175,44 +189,98 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     form.getvalue("password"),
                     plain_text=("Insecure" in form.getvalue("action"))
                 ):
-                    self.send_response_only(200)
+                    self.send_response_only(201) ## Created
                     self.end_headers()
-                    self.wfile.write(bytes("account succesfuly created", "utf-8"))
+                    json_response = json.dumps({
+                        "message": "account succesfuly created"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
                 else:
                     self.send_response_only(403) ## Forbidden
                     self.end_headers()
-                    self.wfile.write(bytes("the user already exists", "utf-8"))
+                    json_response = json.dumps({
+                        "errorMessage": "the user already exists"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
             except:
                 ## database error occured
-                self.send_response_only(400) ## Bad Request
+                self.send_response_only(500) ## Internal Server Error
                 self.end_headers()
             return
-        
-        if validate_login(form.getvalue("username"), form.getvalue("passwordHash")):
+
+        if(form.getvalue("action") == "Login"):
+            if(validate_credentials(form.getvalue("username"), form.getvalue("passwordHash"))):
+                sessionID = create_session(form.getvalue("username"))
+                self.send_response_only(200) ## OK
+                self.end_headers()
+                json_response = json.dumps({
+                    "message": "successfully logged in",
+                    "sessionID": sessionID
+                })
+                self.wfile.write(bytes(json_response, encoding))
+            else:
+                self.send_response_only(401) ## Unauthorized
+                self.end_headers()
+                json_response = json.dumps({
+                    "errorMessage": "valid credentials not provided"
+                })
+                self.wfile.write(bytes(json_response, encoding))
+            return
+
+        ## important security note: sessions are still vulnerable to forgery or replay attacks if not secured with TLS/SSL
+        if validate_session(form.getvalue("username"), form.getvalue("sessionID")):
+            update_session(form.getvalue("sessionID"))
             ## put secured actions here
             if form.getvalue("action") == "Action":
-                self.send_response_only(200)
+                self.send_response_only(200) ## OK
                 self.end_headers()
-                self.wfile.write(bytes("test action", "utf-8"))
+                json_response = json.dumps({
+                    "message": "test action"
+                })
+                self.wfile.write(bytes(json_response, encoding))
+            elif form.getvalue("action") == "Logout":
+                delete_session(form.getvalue("sessionID"))
+                self.send_response_only(200) ## OK
+                self.end_headers()
+                json_response = json.dumps({
+                    "message": "logged out"
+                })
+                self.wfile.write(bytes(json_response, encoding))
             elif form.getvalue("action") == "DeleteAccount":
-                remove_user_account(form.getvalue("username"))
-                self.send_response_only(200)
-                self.end_headers()
-                self.wfile.write(bytes("account deleted", "utf-8"))
+                if remove_user_account(form.getvalue("username")):
+                    self.send_response_only(200) ## OK
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "message": "account deleted"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
+                else:
+                    self.send_response_only(500) ## Internal Server Error
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "errorMessage": "couldn't delete account"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
             else:
                 self.send_response_only(400) ## Bad Request
                 self.end_headers()
         else:
             self.send_response_only(401) ## Unauthorized
             self.end_headers()
-            self.wfile.write(bytes("valid credentials not provided", "utf-8"))
+            json_response = json.dumps({
+                "errorMessage": "valid sessionID not provided"
+            })
+            self.wfile.write(bytes(json_response, encoding))
 
 def close_safely():
     httpd.server_close()
-    print("Closed HTTP/HTTPS server.")
+    logging.info("Closed HTTP/HTTPS server.")
     cursor.close()
     db.close()
-    print("Closed database connection.")
+    logging.info("Closed database connection.")
+
+logging.basicConfig(format='%(levelname)-8s: %(message)s', level=logging.DEBUG)
+# logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 
 ## connect to database
 try:
@@ -223,14 +291,17 @@ try:
         database="DatabaseServer"
     )
     cursor = db.cursor()
-    print("Connected to database.")
+    logging.info("Connected to database.")
 except:
-    print("Couldn't connect to database.")
+    logging.critical("Couldn't connect to database.")
     exit(-1)
 
 ## test code
-add_user_account("testaccount", "badpassword1")
-test_session("testaccount")
+test_username, test_password = "testaccount", "badpassword1"
+add_user_account(test_username, test_password)
+test_session(test_username)
+print()
+remove_user_account(test_username)
 
 ## run http server
 try:
@@ -242,12 +313,12 @@ try:
         certfile="cert.pem",
         server_side=True
     )
-    print("Waiting for HTTP/HTTPS requests...")
+    logging.info("Waiting for HTTP/HTTPS requests...")
     httpd.serve_forever()
 ## make sure sockets and db close properly
 except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
     close_safely()
 except Exception as e:
-    print(e)
+    logging.critical(e.msg)
     close_safely()
