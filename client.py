@@ -6,8 +6,8 @@ import urllib.parse
 import logging
 import json
 
-username = str("")
-sessionID = str("")
+username = ""
+sessionID = ""
 
 commands = (
     "Login",
@@ -16,6 +16,7 @@ commands = (
     "CreateAccountInsecure",
     "Action",
     "DeleteAccount",
+    "help",
     "exit"
 )
 headers = {
@@ -24,10 +25,16 @@ headers = {
 }
 encoding = "utf-8"
 
+def print_help():
+    print("Commands available:")
+    for cmd in commands:
+        print("  " + cmd)
+
 def close_safely():
     conn.close()
     print("Server connection closed.")
 
+## setup
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 try:
     ssl_context = ssl.create_default_context()
@@ -39,11 +46,9 @@ except Exception as e:
     logging.error("Failed to connect to server.")
     exit(-1)
 
-print("Commands available:")
-for cmd in commands:
-    print("  " + cmd)
-
+## client
 try:
+    print_help()
     while True:
         print()
         input_cmd = input("Enter a command: ")
@@ -104,12 +109,14 @@ try:
                     break
                 else:
                     print("Passwords did not match, please try again.")
+            display_name = input("Enter display name: ")
             if is_secure:
                 password = hashlib.sha256(password.encode(encoding)).hexdigest()
             params = urllib.parse.urlencode({
                 "username": username,
                 "passwordHash" if is_secure else "password": password,
-                "action": input_cmd
+                "action": input_cmd,
+                "displayName": display_name
             })
             del password ## minimize risk of password being stolen from memory
             conn.request("POST", "", params, headers)
@@ -161,6 +168,9 @@ try:
                     logging.error(json_response["errorMessage"])
             except:
                 logging.error(str(response.status) + " " + str(response.reason))
+
+        elif input_cmd == "help":
+            print_help()
         
         elif input_cmd == "exit":
             if sessionID != "":
@@ -189,5 +199,4 @@ except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
 except Exception as e:
     logging.critical(e)
-
 close_safely()
