@@ -12,7 +12,7 @@ import json
 
 encoding = "utf-8"
 
-def add_user_account(username, original_password, plain_text=True):
+def add_user_account(username, original_password, display_name, plain_text=True):
     salt = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(16))
     if plain_text:
         hashed_password = hashlib.sha256(original_password.encode(encoding)).hexdigest()
@@ -21,8 +21,8 @@ def add_user_account(username, original_password, plain_text=True):
     hash = hashlib.sha256(hashed_password.encode(encoding) + salt.encode(encoding)).hexdigest()
     try:
         cursor.execute(
-            "INSERT INTO Account (username, passwordHash, salt, hash) VALUES (%s, %s, %s, %s);",
-            (username, hashed_password, salt, hash)
+            "INSERT INTO Account (username, displayName, salt, hash) VALUES (%s, %s, %s, %s);",
+            (username, display_name, salt, hash)
         )
         db.commit() ## would need exception check and db.rollback() if one of many commits fail (ACID property)
     except mysql.connector.IntegrityError: ## used for duplicate key and foreign key constraint errors
@@ -35,9 +35,9 @@ def add_user_account(username, original_password, plain_text=True):
     print()
     logging.debug("Added new account to database:")
     logging.debug("  Username: " + username)
-    logging.debug("  Password: " + original_password)
     if plain_text:
-        logging.debug("  Hashed Password: " + hashed_password)
+        logging.debug("  Password: " + original_password)
+    logging.debug("  Hashed Password: " + hashed_password)
     logging.debug("  Salt: " + salt)
     logging.debug("  Hash: " + hash)
     print()
@@ -105,7 +105,7 @@ def create_session(username, datetime_offset=datetime.timedelta(days=1, hours=0)
         db.commit()
     except mysql.connector.errors.IntegrityError:
         return "" ## session already exists
-                  ## this error will only occur when Session("username") is a foreign key that references Account("username")
+                  ## this error will only occur when Session("username") is set as primary key or unique
     return sessionID
 
 def validate_session(username, sessionID):
@@ -141,6 +141,14 @@ def delete_session(sessionID):
     )
     db.commit()
 
+def delete_expired_sessions():
+    cursor.execute("SELECT username, sessionID, expDateTime FROM Session;")
+    result = cursor.fetchall()
+    for db_username, db_sessionID, db_expDateTime in result:
+        if(db_expDateTime < datetime.datetime.now()):
+            logging.info("deleting an expired session for \"" + db_username + "\"")
+            delete_session(db_sessionID)
+
 def test_session(username):
     expDateTimeSQL = "SELECT expDateTime FROM Session WHERE sessionID = %s;"
 
@@ -166,7 +174,7 @@ def test_session(username):
     delete_session(sessionID)
     logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
-class MissingArgumentException(Exception):
+class MissingHeaderException(Exception):
     pass
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -189,16 +197,21 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         try:
             if form.getvalue("username") == None or form.getvalue("action") == None:
-                raise MissingArgumentException
+                raise MissingHeaderException
 
             if(form.getvalue("action") == "CreateAccountSecure" or form.getvalue("action") == "CreateAccountInsecure"):
                 is_insecure = ("Insecure" in form.getvalue("action"))
-                if (is_insecure and form.getvalue("password") == None) or (not is_insecure and form.getvalue("passwordHash") == None):
-                    raise MissingArgumentException
+                if (
+                    (is_insecure and form.getvalue("password") == None)
+                    or (not is_insecure and form.getvalue("passwordHash") == None)
+                    or form.getvalue("displayName") == None
+                ):
+                    raise MissingHeaderException
                 try:
                     if add_user_account(
                         form.getvalue("username"),
                         form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
+                        form.getvalue("displayName"),
                         plain_text=is_insecure
                     ):
                         self.send_response_only(201) ## Created
@@ -223,7 +236,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
             if(form.getvalue("action") == "Login"):
                 if form.getvalue("passwordHash") == None:
-                    raise MissingArgumentException
+                    raise MissingHeaderException
                 if validate_credentials(form.getvalue("username"), form.getvalue("passwordHash")):
                     sessionID = create_session(form.getvalue("username"))
                     if sessionID != "":
@@ -253,7 +266,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             ## important security note: sessions are still vulnerable to forgery or replay attacks if not secured with TLS/SSL
             if validate_session(form.getvalue("username"), form.getvalue("sessionID")):
                 if form.getvalue("sessionID") == None:
-                    raise MissingArgumentException
+                    raise MissingHeaderException
                 update_session(form.getvalue("sessionID"))
                 ## put secured actions here
                 if form.getvalue("action") == "Action":
@@ -293,11 +306,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 })
                 self.wfile.write(bytes(json_response, encoding))
             
-        except MissingArgumentException:
+        except MissingHeaderException:
             self.send_response_only(400) ## Bad Request
             self.end_headers()
             json_response = json.dumps({
-                "errorMessage": "invalid request format, please include all required headers"
+                "errorMessage": "please include all required headers"
             })
             self.wfile.write(bytes(json_response, encoding))
 
@@ -325,10 +338,12 @@ except:
     logging.critical("Couldn't connect to database.")
     exit(-1)
 
+delete_expired_sessions()
+
 ## test code
 test_username, test_password = "testaccount", "badpassword1"
-add_user_account(test_username, test_password)
-print("test account validated?: " + str(validate_credentials(test_username, hashlib.sha256(test_password.encode(encoding)).hexdigest())))
+add_user_account(test_username, test_password, "John Doe")
+logging.debug("test account validated? " + str(validate_credentials(test_username, hashlib.sha256(test_password.encode(encoding)).hexdigest())))
 print()
 test_session(test_username)
 print()
