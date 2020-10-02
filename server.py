@@ -166,6 +166,9 @@ def test_session(username):
     delete_session(sessionID)
     logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
+class MissingArgumentException(Exception):
+    pass
+
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     ## still need to do something with this, preferably not compromise the entire system XD
@@ -184,99 +187,117 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             }
         )
 
-        if(form.getvalue("action") == "CreateAccountSecure" or form.getvalue("action") == "CreateAccountInsecure"):
-            is_insecure = ("Insecure" in form.getvalue("action"))
-            try:
-                if add_user_account(
-                    form.getvalue("username"),
-                    form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
-                    plain_text=is_insecure
-                ):
-                    self.send_response_only(201) ## Created
-                    self.end_headers()
-                    json_response = json.dumps({
-                        "message": "account succesfuly created"
-                    })
-                    self.wfile.write(bytes(json_response, encoding))
-                else:
-                    self.send_response_only(403) ## Forbidden
-                    self.end_headers()
-                    json_response = json.dumps({
-                        "errorMessage": "the user already exists"
-                    })
-                    self.wfile.write(bytes(json_response, encoding))
-            except Exception as e:
-                logging.error(e)
-                ## database error occured
-                self.send_response_only(500) ## Internal Server Error
-                self.end_headers()
-            return
+        try:
+            if form.getvalue("username") == None or form.getvalue("action") == None:
+                raise MissingArgumentException
 
-        if(form.getvalue("action") == "Login"):
-            if validate_credentials(form.getvalue("username"), form.getvalue("passwordHash")):
-                sessionID = create_session(form.getvalue("username"))
-                if sessionID != "":
+            if(form.getvalue("action") == "CreateAccountSecure" or form.getvalue("action") == "CreateAccountInsecure"):
+                is_insecure = ("Insecure" in form.getvalue("action"))
+                if (is_insecure and form.getvalue("password") == None) or (not is_insecure and form.getvalue("passwordHash") == None):
+                    raise MissingArgumentException
+                try:
+                    if add_user_account(
+                        form.getvalue("username"),
+                        form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
+                        plain_text=is_insecure
+                    ):
+                        self.send_response_only(201) ## Created
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "message": "account succesfuly created"
+                        })
+                        self.wfile.write(bytes(json_response, encoding))
+                    else:
+                        self.send_response_only(403) ## Forbidden
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "the user already exists"
+                        })
+                        self.wfile.write(bytes(json_response, encoding))
+                except Exception as e:
+                    logging.error(e)
+                    ## database error occured
+                    self.send_response_only(500) ## Internal Server Error
+                    self.end_headers()
+                return
+
+            if(form.getvalue("action") == "Login"):
+                if form.getvalue("passwordHash") == None:
+                    raise MissingArgumentException
+                if validate_credentials(form.getvalue("username"), form.getvalue("passwordHash")):
+                    sessionID = create_session(form.getvalue("username"))
+                    if sessionID != "":
+                        self.send_response_only(200) ## OK
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "message": "successfully logged in",
+                            "sessionID": sessionID
+                        })
+                        self.wfile.write(bytes(json_response, encoding))
+                    else:
+                        self.send_response_only(403) ## Forbidden
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "\"" + form.getvalue("username") + "\" already has a session"
+                        })
+                        self.wfile.write(bytes(json_response, encoding))
+                else:
+                    self.send_response_only(401) ## Unauthorized
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "errorMessage": "valid credentials not provided"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
+                return
+
+            ## important security note: sessions are still vulnerable to forgery or replay attacks if not secured with TLS/SSL
+            if validate_session(form.getvalue("username"), form.getvalue("sessionID")):
+                if form.getvalue("sessionID") == None:
+                    raise MissingArgumentException
+                update_session(form.getvalue("sessionID"))
+                ## put secured actions here
+                if form.getvalue("action") == "Action":
                     self.send_response_only(200) ## OK
                     self.end_headers()
                     json_response = json.dumps({
-                        "message": "successfully logged in",
-                        "sessionID": sessionID
+                        "message": "test action"
                     })
                     self.wfile.write(bytes(json_response, encoding))
-                else:
-                    self.send_response_only(403) ## Forbidden
+                elif form.getvalue("action") == "Logout":
+                    delete_session(form.getvalue("sessionID"))
+                    self.send_response_only(200) ## OK
                     self.end_headers()
                     json_response = json.dumps({
-                        "errorMessage": "\"" + form.getvalue("username") + "\" already has a session"
+                        "message": "logged out"
                     })
                     self.wfile.write(bytes(json_response, encoding))
+                elif form.getvalue("action") == "DeleteAccount":
+                    if remove_user_account(form.getvalue("username")):
+                        self.send_response_only(200) ## OK
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "message": "account deleted"
+                        })
+                        self.wfile.write(bytes(json_response, encoding))
+                    else:
+                        self.send_response_only(500) ## Internal Server Error
+                        self.end_headers()
+                else:
+                    self.send_response_only(400) ## Bad Request
+                    self.end_headers()
             else:
                 self.send_response_only(401) ## Unauthorized
                 self.end_headers()
                 json_response = json.dumps({
-                    "errorMessage": "valid credentials not provided"
+                    "errorMessage": "valid sessionID not provided"
                 })
                 self.wfile.write(bytes(json_response, encoding))
-            return
-
-        ## important security note: sessions are still vulnerable to forgery or replay attacks if not secured with TLS/SSL
-        if validate_session(form.getvalue("username"), form.getvalue("sessionID")):
-            update_session(form.getvalue("sessionID"))
-            ## put secured actions here
-            if form.getvalue("action") == "Action":
-                self.send_response_only(200) ## OK
-                self.end_headers()
-                json_response = json.dumps({
-                    "message": "test action"
-                })
-                self.wfile.write(bytes(json_response, encoding))
-            elif form.getvalue("action") == "Logout":
-                delete_session(form.getvalue("sessionID"))
-                self.send_response_only(200) ## OK
-                self.end_headers()
-                json_response = json.dumps({
-                    "message": "logged out"
-                })
-                self.wfile.write(bytes(json_response, encoding))
-            elif form.getvalue("action") == "DeleteAccount":
-                if remove_user_account(form.getvalue("username")):
-                    self.send_response_only(200) ## OK
-                    self.end_headers()
-                    json_response = json.dumps({
-                        "message": "account deleted"
-                    })
-                    self.wfile.write(bytes(json_response, encoding))
-                else:
-                    self.send_response_only(500) ## Internal Server Error
-                    self.end_headers()
-            else:
-                self.send_response_only(400) ## Bad Request
-                self.end_headers()
-        else:
-            self.send_response_only(401) ## Unauthorized
+            
+        except MissingArgumentException:
+            self.send_response_only(400) ## Bad Request
             self.end_headers()
             json_response = json.dumps({
-                "errorMessage": "valid sessionID not provided"
+                "errorMessage": "invalid request format, please include all required headers"
             })
             self.wfile.write(bytes(json_response, encoding))
 
