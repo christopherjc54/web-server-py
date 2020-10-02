@@ -9,7 +9,6 @@ CREATE TABLE `Account` (
     `id` INT NOT NULL AUTO_INCREMENT,       -- might not be used
     `username` VARCHAR(15),
     `displayName` VARCHAR(32),
-    `passwordHash` VARCHAR(256),            -- do not use in production
     `salt` VARCHAR(16),                     -- 16 char * 4 bits for hex digits => 64 bits
     `hash` VARCHAR(256),                    -- SHA-256
     PRIMARY KEY (`username`),
@@ -22,7 +21,7 @@ CREATE TABLE `Session` (
     `username` VARCHAR(15),
     `sessionID` VARCHAR(32),                -- 32 char * 4 bits for hex digits => 128 bits
     `expDateTime` DATETIME,
-    PRIMARY KEY (`username`),
+    PRIMARY KEY (`id`),
     FOREIGN KEY (`username`) REFERENCES Account(`username`),
     UNIQUE (`id`)
 );
@@ -35,7 +34,7 @@ CREATE TABLE `Message` (                    -- doesn't have foreign keys on user
     `toUsername` VARCHAR(15),
     `message` VARCHAR(512),
     `sentDateTime` DATETIME,
-    PRIMARY KEY (`toUsername`),
+    PRIMARY KEY (`id`),
     UNIQUE (`id`)
 );
 
