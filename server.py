@@ -15,10 +15,10 @@ encoding = "utf-8"
 def add_user_account(username, original_password, plain_text=True):
     salt = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(16))
     if plain_text:
-        hashed_password = hashlib.sha256(original_password.encode()).hexdigest()
+        hashed_password = hashlib.sha256(original_password.encode(encoding)).hexdigest()
     else:
         hashed_password = original_password
-    hash = hashlib.sha256(hashed_password.encode() + salt.encode()).hexdigest()
+    hash = hashlib.sha256(hashed_password.encode(encoding) + salt.encode(encoding)).hexdigest()
     try:
         cursor.execute(
             "INSERT INTO Account (username, passwordHash, salt, hash) VALUES (%s, %s, %s, %s);",
@@ -29,10 +29,8 @@ def add_user_account(username, original_password, plain_text=True):
         logging.error("user \"" + username + "\" already exists")
         return False
     except mysql.connector.Error as e:
-        logging.critical("Error Code: " + str(e.errno))
-        logging.critical("SQL State: " + str(e.sqlstate))
-        logging.critical("Message: " + e.msg)
-        raise e
+        logging.critical(e.msg)
+        return False
 
     print()
     logging.debug("Added new account to database:")
@@ -82,13 +80,13 @@ def get_all_accounts():
 
 def validate_credentials(username, password_hash):
     cursor.execute(
-        "SELECT (username, salt, hash) FROM Account WHERE username = %s;",
+        "SELECT username, salt, hash FROM Account WHERE username = %s;",
         (username,)
     )
     result = cursor.fetchall()
     if len(result) > 0:
         for db_username, db_salt, db_hash in result:
-            salted_hash = hashlib.sha256(password_hash.encode() + db_salt.encode()).hexdigest()
+            salted_hash = hashlib.sha256((password_hash).encode(encoding) + db_salt.encode(encoding)).hexdigest()
             if db_username == username and db_hash == salted_hash:
                 return True
         logging.error("\"" + username + "\" tried logging in with wrong password")
@@ -99,11 +97,15 @@ def validate_credentials(username, password_hash):
 def create_session(username, datetime_offset=datetime.timedelta(days=1, hours=0)):
     sessionID = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(32))
     expDateTime = datetime.datetime.now() + datetime_offset
-    cursor.execute(
-        "INSERT INTO Session (username, sessionID, expDateTime) VALUES (%s, %s, %s);",
-        (username, sessionID, expDateTime)
-    )
-    db.commit()
+    try:
+        cursor.execute(
+            "INSERT INTO Session (username, sessionID, expDateTime) VALUES (%s, %s, %s);",
+            (username, sessionID, expDateTime)
+        )
+        db.commit()
+    except mysql.connector.errors.IntegrityError:
+        return "" ## session already exists
+                  ## this error will only occur when Session("username") is a foreign key that references Account("username")
     return sessionID
 
 def validate_session(username, sessionID):
@@ -183,11 +185,12 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         )
 
         if(form.getvalue("action") == "CreateAccountSecure" or form.getvalue("action") == "CreateAccountInsecure"):
+            is_insecure = ("Insecure" in form.getvalue("action"))
             try:
                 if add_user_account(
                     form.getvalue("username"),
-                    form.getvalue("password"),
-                    plain_text=("Insecure" in form.getvalue("action"))
+                    form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
+                    plain_text=is_insecure
                 ):
                     self.send_response_only(201) ## Created
                     self.end_headers()
@@ -202,22 +205,31 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                         "errorMessage": "the user already exists"
                     })
                     self.wfile.write(bytes(json_response, encoding))
-            except:
+            except Exception as e:
+                logging.error(e)
                 ## database error occured
                 self.send_response_only(500) ## Internal Server Error
                 self.end_headers()
             return
 
         if(form.getvalue("action") == "Login"):
-            if(validate_credentials(form.getvalue("username"), form.getvalue("passwordHash"))):
+            if validate_credentials(form.getvalue("username"), form.getvalue("passwordHash")):
                 sessionID = create_session(form.getvalue("username"))
-                self.send_response_only(200) ## OK
-                self.end_headers()
-                json_response = json.dumps({
-                    "message": "successfully logged in",
-                    "sessionID": sessionID
-                })
-                self.wfile.write(bytes(json_response, encoding))
+                if sessionID != "":
+                    self.send_response_only(200) ## OK
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "message": "successfully logged in",
+                        "sessionID": sessionID
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
+                else:
+                    self.send_response_only(403) ## Forbidden
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "errorMessage": "\"" + form.getvalue("username") + "\" already has a session"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
             else:
                 self.send_response_only(401) ## Unauthorized
                 self.end_headers()
@@ -257,10 +269,6 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 else:
                     self.send_response_only(500) ## Internal Server Error
                     self.end_headers()
-                    json_response = json.dumps({
-                        "errorMessage": "couldn't delete account"
-                    })
-                    self.wfile.write(bytes(json_response, encoding))
             else:
                 self.send_response_only(400) ## Bad Request
                 self.end_headers()
@@ -299,6 +307,8 @@ except:
 ## test code
 test_username, test_password = "testaccount", "badpassword1"
 add_user_account(test_username, test_password)
+print("test account validated?: " + str(validate_credentials(test_username, hashlib.sha256(test_password.encode(encoding)).hexdigest())))
+print()
 test_session(test_username)
 print()
 remove_user_account(test_username)
