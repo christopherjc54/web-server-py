@@ -69,14 +69,17 @@ def remove_user_account(username):
     return False
 
 def get_all_accounts():
-    cursor.execute("SELECT * FROM Account;")
+    cursor.execute("SELECT username, displayName, salt, hash FROM Account;")
     result = cursor.fetchall()
     if len(result) > 0:
         account_str = ""
-        for username, password, salt, password_hash in result:
-            if account_str != "":
-                account_str += "\n"
-            account_str += username + " " + password + " " + salt + " " + password_hash
+        for index, (db_username, db_display_name, db_salt, db_hash) in enumerate(result):
+            account_str += "Username: " + db_username
+            account_str += "\n" + "Display Name: " + db_display_name
+            # account_str += "\n" + "Salt: " + db_salt
+            # account_str += "\n" + "Hash: " + db_hash
+            if index < len(result) - 1:
+                account_str += "\n\n"
         return account_str
     else:
         return "no accounts found"
