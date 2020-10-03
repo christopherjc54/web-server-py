@@ -10,6 +10,9 @@ import datetime
 import logging
 import json
 
+httpd = None
+db = None
+cursor = None
 encoding = "utf-8"
 
 def add_user_account(username, original_password, display_name, plain_text=True):
@@ -86,7 +89,7 @@ def validate_credentials(username, password_hash):
     result = cursor.fetchall()
     if len(result) > 0:
         for db_username, db_salt, db_hash in result:
-            salted_hash = hashlib.sha256((password_hash).encode(encoding) + db_salt.encode(encoding)).hexdigest()
+            salted_hash = hashlib.sha256(password_hash.encode(encoding) + db_salt.encode(encoding)).hexdigest()
             if db_username == username and db_hash == salted_hash:
                 return True
         logging.error("\"" + username + "\" tried logging in with wrong password")
@@ -174,18 +177,36 @@ def test_session(username):
     delete_session(sessionID)
     logging.debug("valid session? " + str(validate_session(username, sessionID)))
 
+class DatabaseConnectionLostException(Exception):
+    pass
+
 class MissingHeaderException(Exception):
     pass
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
+    def check_db_connection(self):
+        ## try to reconnect
+        if not db.is_connected():
+            logging.error("Lost connection to database, reconnecting...")
+            connect_to_db()
+        ## connection was permanently lost
+        if not db.is_connected:
+            logging.error("Failed to reconnect.")
+            self.send_response_only(500) ## Internal Server Error
+            self.end_headers()
+            raise DatabaseConnectionLostException
+
     ## still need to do something with this, preferably not compromise the entire system XD
     def do_GET(self):
+        self.check_db_connection()
+
         self.send_response_only(200) ## OK
         self.end_headers()
         self.wfile.write(bytes(get_all_accounts(), encoding))
 
     def do_POST(self):
+        self.check_db_connection()
         form = cgi.FieldStorage(
             fp = self.rfile,
             headers = self.headers,
@@ -227,9 +248,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                             "errorMessage": "the user already exists"
                         })
                         self.wfile.write(bytes(json_response, encoding))
-                except Exception as e:
+                ## database error occured
+                except mysql.connector.errors.Error as e:
                     logging.error(e)
-                    ## database error occured
                     self.send_response_only(500) ## Internal Server Error
                     self.end_headers()
                 return
@@ -314,30 +335,25 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             })
             self.wfile.write(bytes(json_response, encoding))
 
-def close_safely():
-    httpd.server_close()
-    logging.info("Closed HTTP/HTTPS server.")
-    cursor.close()
-    db.close()
-    logging.info("Closed database connection.")
+def connect_to_db():
+    try:
+        global db, cursor
+        db = mysql.connector.connect(
+            host="localhost",
+            user="user",
+            password="1234",
+            database="DatabaseServer"
+        )
+        cursor = db.cursor()
+        logging.info("Connected to database.")
+    except:
+        logging.critical("Couldn't connect to database.")
+        exit(-1)
 
+## setup
 logging.basicConfig(format='%(levelname)-8s: %(message)s', level=logging.DEBUG)
 # logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-
-## connect to database
-try:
-    db = mysql.connector.connect(
-        host="localhost",
-        user="user",
-        password="1234",
-        database="DatabaseServer"
-    )
-    cursor = db.cursor()
-    logging.info("Connected to database.")
-except:
-    logging.critical("Couldn't connect to database.")
-    exit(-1)
-
+connect_to_db()
 delete_expired_sessions()
 
 ## test code
@@ -349,7 +365,7 @@ test_session(test_username)
 print()
 remove_user_account(test_username)
 
-## run http server
+## run https server
 try:
     ## need to run with sudo to use port 443, otherwise use port 1024+
     httpd = ThreadingHTTPServer(("localhost", 4443), SimpleHTTPRequestHandler)
@@ -359,12 +375,21 @@ try:
         certfile="cert.pem",
         server_side=True
     )
-    logging.info("Waiting for HTTP/HTTPS requests...")
+    logging.info("Waiting for HTTPS requests...")
     httpd.serve_forever()
-## make sure sockets and db close properly
+## shutdown server since all it does is handle db related requests
+except DatabaseConnectionLostException:
+    pass
 except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
-    close_safely()
 except Exception as e:
     logging.critical(e.msg)
-    close_safely()
+## make sure sockets and db close properly
+if httpd is not None:
+    httpd.server_close()
+    logging.info("Closed HTTPS server.")
+if cursor is not None:
+    cursor.close()
+if db is not None:
+    db.close()
+    logging.info("Closed database connection.")
