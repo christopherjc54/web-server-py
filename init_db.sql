@@ -41,7 +41,7 @@ CREATE TABLE `Message` (                    -- doesn't have foreign keys on user
 DROP PROCEDURE IF EXISTS `DeleteOrphanMessages`;
 DELIMITER $$ ;
 CREATE PROCEDURE `DeleteOrphanMessages`(
-    IN sp_username VARCHAR(15)             -- optimizes deletion...maybe, might need to use more complex logic
+    IN sp_username VARCHAR(15)             -- optimizes deletion...maybe
 )
 BEGIN
     DELETE m
