@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from getpass import getpass
 import hashlib
 import http.client
@@ -9,6 +11,7 @@ import json
 username = ""
 sessionID = ""
 
+connection = None
 commands = (
     "Login",
     "Logout",
@@ -30,29 +33,35 @@ def print_help():
     for cmd in commands:
         print("  " + cmd)
 
-def close_safely():
-    conn.close()
-    print("Server connection closed.")
-
 ## setup
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 try:
     ssl_context = ssl.create_default_context()
     ssl_context.load_verify_locations("cert.pem")
     ssl_context.check_hostname = False
-    conn = http.client.HTTPSConnection("localhost", 4443, context=ssl_context)
-except Exception as e:
+    connection = http.client.HTTPSConnection("localhost", 4443, context=ssl_context)
+except ssl.SSLError as e:
+    logging.error(e)
+    logging.error("Failed to secure connection request.")
+    exit(-1)
+except http.client.HTTPException as e:
     logging.error(e)
     logging.error("Failed to connect to server.")
     exit(-1)
 
-## client
+## run client
 try:
     print_help()
     while True:
         print()
         input_cmd = input("Enter a command: ")
         print()
+
+        for cmd in commands:
+            if input_cmd.lower() == cmd.lower():
+                if input_cmd != cmd:
+                    input_cmd = cmd
+                break
             
         if input_cmd == "Login":
             username = input("Enter username: ")
@@ -63,9 +72,9 @@ try:
                 "action": input_cmd
             })
             del passwordHash
-            conn.request("POST", "", params, headers)
+            connection.request("POST", "", params, headers)
             del params
-            response = conn.getresponse()
+            response = connection.getresponse()
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 200:
@@ -85,8 +94,8 @@ try:
                 "sessionID": sessionID,
                 "action": input_cmd
             })
-            conn.request("POST", "", params, headers)
-            response = conn.getresponse()
+            connection.request("POST", "", params, headers)
+            response = connection.getresponse()
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 200:
@@ -119,9 +128,9 @@ try:
                 "displayName": display_name
             })
             del password ## minimize risk of password being stolen from memory
-            conn.request("POST", "", params, headers)
+            connection.request("POST", "", params, headers)
             del params
-            response = conn.getresponse()
+            response = connection.getresponse()
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 201: ## Created
@@ -138,8 +147,8 @@ try:
                 "sessionID": sessionID,
                 "action": input_cmd
             })
-            conn.request("POST", "", params, headers)
-            response = conn.getresponse()
+            connection.request("POST", "", params, headers)
+            response = connection.getresponse()
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 200:
@@ -156,8 +165,8 @@ try:
                 "sessionID": sessionID,
                 "action": input_cmd
             })
-            conn.request("POST", "", params, headers)
-            response = conn.getresponse()
+            connection.request("POST", "", params, headers)
+            response = connection.getresponse()
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 200:
@@ -173,14 +182,15 @@ try:
             print_help()
         
         elif input_cmd == "exit":
+            ## attempt to end current session in case server only allows one session per user
             if sessionID != "":
                 params = urllib.parse.urlencode({
                     "username": username,
                     "sessionID": sessionID,
                     "action": "Logout"
                 })
-                conn.request("POST", "", params, headers)
-                response = conn.getresponse()
+                connection.request("POST", "", params, headers)
+                response = connection.getresponse()
                 try:
                     json_response = json.loads(response.read().decode(encoding))
                     if response.status == 200:
@@ -199,4 +209,7 @@ except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
 except Exception as e:
     logging.critical(e)
-close_safely()
+## close socket safely
+if connection is not None:
+    connection.close()
+    print("Server connection closed.")
