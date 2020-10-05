@@ -99,9 +99,8 @@ try:
     )
     logging.info("Waiting for HTTPS requests...")
     httpd.serve_forever()
-## shutdown server since all it does is handle db related requests
 except DatabaseConnectionLostException:
-    pass
+    pass ## shutdown server since all it does is handle db related requests
 except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
 except Exception as e:

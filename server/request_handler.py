@@ -18,6 +18,14 @@ class MissingHeaderException(Exception):
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
+    possible_action = (
+        "CreateAccountSecure",
+        "CreateAccountInsecure",
+        "Login",
+        "Logout",
+        "DeleteAccount"
+    )
+
     def check_db_connection(self):
         ## try to reconnect
         if not Global.db.is_connected():
@@ -52,6 +60,14 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             if form.getvalue("username") == None or form.getvalue("action") == None:
                 raise MissingHeaderException
+
+            is_valid_action = False
+            for action in self.possible_action:
+                if form.getvalue("action") == action:
+                    is_valid_action = True
+            if Global.handler.has_action(form.getvalue("action")):
+                    is_valid_action = True
+            logging.info("Received " + ("valid" if is_valid_action else "invalid") + " \"" + form.getvalue("action") + "\" request.")
 
             if(form.getvalue("action") == "CreateAccountSecure" or form.getvalue("action") == "CreateAccountInsecure"):
                 is_insecure = ("Insecure" in form.getvalue("action"))
@@ -117,10 +133,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 if form.getvalue("sessionID") == None:
                     raise MissingHeaderException
                 Session.update(form.getvalue("sessionID"))
-                ## pass secured actions to app-specific request handler
-                if Global.handler.has_action(form.getvalue("action")):
-                    Global.handler.handle_action(self, form.getvalue("action"))
-                elif form.getvalue("action") == "Logout":
+                if form.getvalue("action") == "Logout":
                     Session.delete(form.getvalue("sessionID"))
                     self.send_response_only(200) ## OK
                     self.end_headers()
@@ -141,6 +154,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     except:
                         self.send_response_only(500) ## Internal Server Error
                         self.end_headers()
+                ## pass secured actions to app-specific request handler
+                elif is_valid_action:
+                    Global.handler.handle_action(self, form)
                 else:
                     self.send_response_only(400) ## Bad Request
                     self.end_headers()

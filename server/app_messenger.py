@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import mysql.connector
+import cgi
 import logging
 import json
 
@@ -10,11 +11,13 @@ from app_default import AppRequestHandler
 
 class MessengerAppRequestHandler(AppRequestHandler):
     
-    possible_actions = ( ## tuples with one item should have a comma
-        "Action"
+    possible_actions = (
+        "Action",
         "SendMessage",
         "GetNewMessages",
-        "GetAllMessages"
+        "GetAllMessages",
+        "SendFile",
+        "GetFile"
     )
 
     def on_remove_user(username):
@@ -29,10 +32,10 @@ class MessengerAppRequestHandler(AppRequestHandler):
             Global.db.rollback()
             raise Exception
 
-    def handle_action(self, request, input_action):
+    def handle_action(self, request, form):
         try:
             
-            if input_action == "Message":
+            if form.getvalue("action") == "Action":
                 request.send_response_only(200) ## OK
                 request.end_headers()
                 json_response = json.dumps({
@@ -40,13 +43,19 @@ class MessengerAppRequestHandler(AppRequestHandler):
                 })
                 request.wfile.write(bytes(json_response, Global.encoding))
             
-            elif input_action == "SendMessage":
+            elif form.getvalue("action") == "SendMessage":
                 raise NotImplementedError
             
-            elif input_action == "GetNewMessages":
+            elif form.getvalue("action") == "GetNewMessages":
                 raise NotImplementedError
             
-            elif input_action == "GetAllMessages":
+            elif form.getvalue("action") == "GetAllMessages":
+                raise NotImplementedError
+            
+            elif form.getvalue("action") == "SendFile":
+                raise NotImplementedError
+
+            elif form.getvalue("action") == "GetFile":
                 raise NotImplementedError
         
         except NotImplementedError:

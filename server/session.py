@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from os import stat
 import mysql.connector
 import random, string
 import datetime

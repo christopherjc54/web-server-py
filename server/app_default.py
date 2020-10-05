@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import mysql.connector
+import cgi
 import logging
 import json
 
@@ -16,15 +17,15 @@ class AppRequestHandler:
 
     def has_action(self, input_action):
         for action in self.possible_actions:
-            if input_action.lower() == action.lower():
+            if input_action == action:
                 return True
         return False
     
     def on_remove_user():
         pass
 
-    def handle_action(self, request, input_action):
-        if input_action == "Action":
+    def handle_action(self, request, form):
+        if form.getvalue("action") == "Action":
             request.send_response_only(200) ## OK
             request.end_headers()
             json_response = json.dumps({
