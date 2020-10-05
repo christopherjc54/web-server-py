@@ -64,7 +64,7 @@ class Account:
         except mysql.connector.Error as e:
             logging.critical(e.msg)
             Global.db.rollback()
-        return False
+            raise Exception
 
     def validate(username, password_hash):
         Global.cursor.execute(

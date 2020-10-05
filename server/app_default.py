@@ -23,7 +23,7 @@ class AppRequestHandler:
     def on_remove_user():
         pass
 
-    def handle(self, request, input_action):
+    def handle_action(self, request, input_action):
         if input_action == "Action":
             request.send_response_only(200) ## OK
             request.end_headers()

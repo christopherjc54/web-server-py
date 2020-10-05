@@ -119,7 +119,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 Session.update(form.getvalue("sessionID"))
                 ## pass secured actions to app-specific request handler
                 if Global.handler.has_action(form.getvalue("action")):
-                    Global.handler.handle(self, form.getvalue("action"))
+                    Global.handler.handle_action(self, form.getvalue("action"))
                 elif form.getvalue("action") == "Logout":
                     Session.delete(form.getvalue("sessionID"))
                     self.send_response_only(200) ## OK
@@ -130,16 +130,14 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(bytes(json_response, Global.encoding))
                 elif form.getvalue("action") == "DeleteAccount":
                     try:
-                        Global.handler.on_remove_user(form.getvalue("username")) ## cleanup orphan data if needed
-                        if Account.remove(form.getvalue("username")):
-                            self.send_response_only(200) ## OK
-                            self.end_headers()
-                            json_response = json.dumps({
-                                "message": "account deleted"
-                            })
-                            self.wfile.write(bytes(json_response, Global.encoding))
-                        else:
-                            raise Exception
+                        Global.handler.on_remove_user(form.getvalue("username")) ## cleanup app-specific user data
+                        Account.remove(form.getvalue("username"))
+                        self.send_response_only(200) ## OK
+                        self.end_headers()
+                        json_response = json.dumps({
+                            "message": "account deleted"
+                        })
+                        self.wfile.write(bytes(json_response, Global.encoding))
                     except:
                         self.send_response_only(500) ## Internal Server Error
                         self.end_headers()
