@@ -60,7 +60,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     or form.getvalue("displayName") == None
                 ):
                     raise MissingHeaderException
-                return_success, error_message = Account.add_user_account(
+                return_success, error_message = Account.add(
                     form.getvalue("username"),
                     form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
                     form.getvalue("displayName"),
@@ -133,7 +133,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     })
                     self.wfile.write(bytes(json_response, Global.encoding))
                 elif form.getvalue("action") == "DeleteAccount":
-                    if Account.remove_user_account(form.getvalue("username")):
+                    if Account.remove(form.getvalue("username")):
                         self.send_response_only(200) ## OK
                         self.end_headers()
                         json_response = json.dumps({

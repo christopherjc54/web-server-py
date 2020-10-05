@@ -8,9 +8,16 @@ import urllib.parse
 import logging
 import json
 
+## config
+server_address = "localhost"
+server_port = 4443
+ssl_cert_file = "ssl/cert.pem"
+
+## session globals
 username = ""
 sessionID = ""
 
+## globals
 connection = None
 commands = (
     "Login",
@@ -37,9 +44,9 @@ def print_help():
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 try:
     ssl_context = ssl.create_default_context()
-    ssl_context.load_verify_locations("cert.pem")
+    ssl_context.load_verify_locations(ssl_cert_file)
     ssl_context.check_hostname = False
-    connection = http.client.HTTPSConnection("localhost", 4443, context=ssl_context)
+    connection = http.client.HTTPSConnection(server_address, server_port, context=ssl_context)
 except ssl.SSLError as e:
     logging.error(e)
     logging.error("Failed to secure connection request.")
