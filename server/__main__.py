@@ -16,16 +16,18 @@ class Global(object):
     db = None
     cursor = None
     encoding = "utf-8"
+    config = None
+    handler = None ## instance of the application-specific request handler class
 
 class Database:
 
     def connect():
         try:
             Global.db = mysql.connector.connect(
-                host=config.get("database", "address"),
-                user=config.get("database", "username"),
-                password=config.get("database", "password"),
-                database=config.get("database", "name")
+                host=Global.config.get("database", "address"),
+                user=Global.config.get("database", "username"),
+                password=Global.config.get("database", "password"),
+                database=Global.config.get("database", "name")
             )
             Global.cursor = Global.db.cursor()
             logging.info("Connected to database.")
@@ -38,41 +40,45 @@ from session import *
 from request_handler import *
 
 ## server globals
-httpd = None
-config = None
 config_filename = "config.ini"
 
 ## setup
 logging.basicConfig(format='%(levelname)-8s: %(message)s', level=logging.DEBUG)
 # logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-config = configparser.ConfigParser(comment_prefixes="#", inline_comment_prefixes="#")
-config.setdefault("database", {
+Global.config = configparser.ConfigParser(comment_prefixes="#", inline_comment_prefixes="#")
+Global.config.setdefault("database", {
     "address": "localhost",
     "username" : "username",
     "password": "password",
     "name": "database"
 })
-config.setdefault("server", {
+Global.config.setdefault("server", {
     "run_tests_on_startup": "false",
     "address": "localhost",
     "port": "443",
     "ssl_key_file": "private_key.pem",
     "ssl_cert_file": "cert.pem"
 })
+Global.config.setdefault("request_handler", {
+    "module_name": "app_default",
+    "class_name": "AppRequestHandler"
+})
 try:
     if not os.path.exists(config_filename):
         raise Exception
-    config.read(config_filename)
+    Global.config.read(config_filename)
 except:
     logging.critical("Couldn't read config file.")
     exit(-1)
+handler_class = locate(Global.config.get("request_handler", "module_name") + "." + Global.config.get("request_handler", "class_name"))
+Global.handler = handler_class()
 Database.connect()
 if not (Global.db or Global.cursor):
     exit(-1)
 Session.delete_all_expired()
 
 ## test code
-if config.getboolean("server", "run_tests_on_startup"):
+if Global.config.getboolean("server", "run_tests_on_startup"):
     test_username, test_password = "testaccount", "badpassword1"
     Account.add(test_username, test_password, "John Doe")
     logging.debug("test account validated? " + str(Account.validate(test_username, hashlib.sha256(test_password.encode(Global.encoding)).hexdigest())))
@@ -82,12 +88,13 @@ if config.getboolean("server", "run_tests_on_startup"):
     Account.remove(test_username)
 
 ## run https server
+httpd = None
 try:
-    httpd = ThreadingHTTPServer((config.get("server", "address"), config.getint("server", "port")), SimpleHTTPRequestHandler)
+    httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), SimpleHTTPRequestHandler)
     httpd.socket = ssl.wrap_socket(
         httpd.socket,
-        keyfile=config.get("server", "ssl_key_file"),
-        certfile=config.get("server", "ssl_cert_file"),
+        keyfile=Global.config.get("server", "ssl_key_file"),
+        certfile=Global.config.get("server", "ssl_cert_file"),
         server_side=True
     )
     logging.info("Waiting for HTTPS requests...")

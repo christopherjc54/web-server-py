@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler
 import cgi
 import logging
 import json
+from pydoc import locate
 
 from __main__ import Global, Database
 from account import *
@@ -116,14 +117,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 if form.getvalue("sessionID") == None:
                     raise MissingHeaderException
                 Session.update(form.getvalue("sessionID"))
-                ## put secured actions here
-                if form.getvalue("action") == "Action":
-                    self.send_response_only(200) ## OK
-                    self.end_headers()
-                    json_response = json.dumps({
-                        "message": "test action"
-                    })
-                    self.wfile.write(bytes(json_response, Global.encoding))
+                ## pass secured actions to app-specific request handler
+                if Global.handler.has_action(form.getvalue("action")):
+                    Global.handler.handle(self, form.getvalue("action"))
                 elif form.getvalue("action") == "Logout":
                     Session.delete(form.getvalue("sessionID"))
                     self.send_response_only(200) ## OK
@@ -133,14 +129,18 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     })
                     self.wfile.write(bytes(json_response, Global.encoding))
                 elif form.getvalue("action") == "DeleteAccount":
-                    if Account.remove(form.getvalue("username")):
-                        self.send_response_only(200) ## OK
-                        self.end_headers()
-                        json_response = json.dumps({
-                            "message": "account deleted"
-                        })
-                        self.wfile.write(bytes(json_response, Global.encoding))
-                    else:
+                    try:
+                        Global.handler.on_remove_user(form.getvalue("username")) ## cleanup orphan data if needed
+                        if Account.remove(form.getvalue("username")):
+                            self.send_response_only(200) ## OK
+                            self.end_headers()
+                            json_response = json.dumps({
+                                "message": "account deleted"
+                            })
+                            self.wfile.write(bytes(json_response, Global.encoding))
+                        else:
+                            raise Exception
+                    except:
                         self.send_response_only(500) ## Internal Server Error
                         self.end_headers()
                 else:

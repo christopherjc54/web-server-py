@@ -59,10 +59,6 @@ class Account:
                 "DELETE FROM Account WHERE username = %s;",
                 (username,)
             )
-            Global.cursor.execute(
-                "CALL DeleteOrphanMessages(%s);",
-                (username,)
-            )
             Global.db.commit()
             return True
         except mysql.connector.Error as e:
