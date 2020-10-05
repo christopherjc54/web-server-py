@@ -10,12 +10,33 @@ import datetime
 import logging
 import json
 
+## globals
 httpd = None
 db = None
 cursor = None
 encoding = "utf-8"
 
+## config
+db_address = "localhost"
+db_username = "user"
+db_password = "1234"
+db_name = "DatabaseServer"
+run_tests_on_startup = True
+server_address = "localhost"
+server_port = 4443 ## need to run with sudo to use port 443, otherwise use port 1024+
+ssl_cert_file = "cert.pem"
+ssl_key_file = "private_key.pem"
+
 def add_user_account(username, original_password, display_name, plain_text=True):
+    cursor.execute(
+        "SELECT * FROM Account WHERE username = %s",
+        (username,)
+    )
+    result = cursor.fetchall()
+    if len(result) > 0:
+        error_message = "user \"" + username + "\" already exists"
+        logging.error(error_message)
+        return False, error_message
     salt = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(16))
     if plain_text:
         hashed_password = hashlib.sha256(original_password.encode(encoding)).hexdigest()
@@ -28,12 +49,11 @@ def add_user_account(username, original_password, display_name, plain_text=True)
             (username, display_name, salt, hash)
         )
         db.commit() ## would need exception check and db.rollback() if one of many commits fail (ACID property)
-    except mysql.connector.IntegrityError: ## used for duplicate key and foreign key constraint errors
-        logging.error("user \"" + username + "\" already exists")
-        return False
-    except mysql.connector.Error as e:
-        logging.critical(e.msg)
-        return False
+    except mysql.connector.DataError as e:
+        assert "data too long" in e.msg.lower()
+        error_message = "username must be 15 or less characters"
+        logging.error(error_message)
+        return False, error_message
 
     print()
     logging.debug("Added new account to database:")
@@ -45,7 +65,7 @@ def add_user_account(username, original_password, display_name, plain_text=True)
     logging.debug("  Hash: " + hash)
     print()
 
-    return True
+    return True, ""
 
 def remove_user_account(username):
     try:
@@ -109,7 +129,7 @@ def create_session(username, datetime_offset=datetime.timedelta(days=1, hours=0)
             (username, sessionID, expDateTime)
         )
         db.commit()
-    except mysql.connector.errors.IntegrityError:
+    except mysql.connector.errors.IntegrityError: ## used for duplicate key errors, foreign key constraint errors (n/a here), and data too long errors (n/a here)
         return "" ## session already exists
                   ## this error will only occur when Session("username") is set as primary key or unique
     return sessionID
@@ -194,7 +214,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             logging.error("Lost connection to database, reconnecting...")
             connect_to_db()
         ## connection was permanently lost
-        if not db.is_connected:
+        if not db.is_connected():
             logging.error("Failed to reconnect.")
             self.send_response_only(500) ## Internal Server Error
             self.end_headers()
@@ -231,31 +251,26 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     or form.getvalue("displayName") == None
                 ):
                     raise MissingHeaderException
-                try:
-                    if add_user_account(
-                        form.getvalue("username"),
-                        form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
-                        form.getvalue("displayName"),
-                        plain_text=is_insecure
-                    ):
-                        self.send_response_only(201) ## Created
-                        self.end_headers()
-                        json_response = json.dumps({
-                            "message": "account succesfuly created"
-                        })
-                        self.wfile.write(bytes(json_response, encoding))
-                    else:
-                        self.send_response_only(403) ## Forbidden
-                        self.end_headers()
-                        json_response = json.dumps({
-                            "errorMessage": "the user already exists"
-                        })
-                        self.wfile.write(bytes(json_response, encoding))
-                ## database error occured
-                except mysql.connector.errors.Error as e:
-                    logging.error(e)
-                    self.send_response_only(500) ## Internal Server Error
+                return_success, error_message = add_user_account(
+                    form.getvalue("username"),
+                    form.getvalue("password") if is_insecure else form.getvalue("passwordHash"),
+                    form.getvalue("displayName"),
+                    plain_text=is_insecure
+                )
+                if return_success:
+                    self.send_response_only(201) ## Created
                     self.end_headers()
+                    json_response = json.dumps({
+                        "message": "account succesfuly created"
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
+                else:
+                    self.send_response_only(403) ## Forbidden
+                    self.end_headers()
+                    json_response = json.dumps({
+                        "errorMessage": error_message
+                    })
+                    self.wfile.write(bytes(json_response, encoding))
                 return
 
             if(form.getvalue("action") == "Login"):
@@ -342,40 +357,41 @@ def connect_to_db():
     try:
         global db, cursor
         db = mysql.connector.connect(
-            host="localhost",
-            user="user",
-            password="1234",
-            database="DatabaseServer"
+            host=db_address,
+            user=db_username,
+            password=db_password,
+            database=db_name
         )
         cursor = db.cursor()
         logging.info("Connected to database.")
     except:
         logging.critical("Couldn't connect to database.")
-        exit(-1)
 
 ## setup
 logging.basicConfig(format='%(levelname)-8s: %(message)s', level=logging.DEBUG)
 # logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 connect_to_db()
+if not db.is_connected():
+    exit(-1)
 delete_expired_sessions()
 
 ## test code
-test_username, test_password = "testaccount", "badpassword1"
-add_user_account(test_username, test_password, "John Doe")
-logging.debug("test account validated? " + str(validate_credentials(test_username, hashlib.sha256(test_password.encode(encoding)).hexdigest())))
-print()
-test_session(test_username)
-print()
-remove_user_account(test_username)
+if run_tests_on_startup:
+    test_username, test_password = "testaccount", "badpassword1"
+    add_user_account(test_username, test_password, "John Doe")
+    logging.debug("test account validated? " + str(validate_credentials(test_username, hashlib.sha256(test_password.encode(encoding)).hexdigest())))
+    print()
+    test_session(test_username)
+    print()
+    remove_user_account(test_username)
 
 ## run https server
 try:
-    ## need to run with sudo to use port 443, otherwise use port 1024+
-    httpd = ThreadingHTTPServer(("localhost", 4443), SimpleHTTPRequestHandler)
+    httpd = ThreadingHTTPServer((server_address, server_port), SimpleHTTPRequestHandler)
     httpd.socket = ssl.wrap_socket(
         httpd.socket,
-        keyfile="private_key.pem",
-        certfile="cert.pem",
+        keyfile=ssl_key_file,
+        certfile=ssl_cert_file,
         server_side=True
     )
     logging.info("Waiting for HTTPS requests...")
