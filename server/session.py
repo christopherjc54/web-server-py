@@ -10,7 +10,6 @@ from __main__ import Global
 
 class Session:
 
-    @staticmethod
     def create(username, datetime_offset=datetime.timedelta(days=1, hours=0)):
         sessionID = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(32))
         expDateTime = datetime.datetime.now() + datetime_offset
@@ -25,7 +24,6 @@ class Session:
                       ## this error will only occur when Session("username") is set as primary key or unique
         return sessionID
 
-    @staticmethod
     def validate(username, sessionID):
         Global.cursor.execute(
             "SELECT sessionID, expDateTime FROM Session WHERE username = %s AND sessionID = %s;",
@@ -44,7 +42,6 @@ class Session:
             logging.error("session not found")
         return False
 
-    @staticmethod
     def update(sessionID, datetime_offset=datetime.timedelta(days=1, hours=0)):
         expDateTime = datetime.datetime.now() + datetime_offset
         Global.cursor.execute(
@@ -53,7 +50,6 @@ class Session:
         )
         Global.db.commit()
 
-    @staticmethod
     def delete(sessionID):
         Global.cursor.execute(
             "DELETE FROM Session WHERE sessionID = %s;",
@@ -61,7 +57,6 @@ class Session:
         )
         Global.db.commit()
 
-    @staticmethod
     def delete_all_expired():
         Global.cursor.execute("SELECT username, sessionID, expDateTime FROM Session;")
         result = Global.cursor.fetchall()
@@ -70,7 +65,6 @@ class Session:
                 logging.info("deleting an expired session for \"" + db_username + "\"")
                 Session.delete(db_sessionID)
 
-    @staticmethod
     def test(username):
         expDateTimeSQL = "SELECT expDateTime FROM Session WHERE sessionID = %s;"
 

@@ -9,7 +9,6 @@ from __main__ import Global
 
 class Account:
 
-    @staticmethod
     def add(username, original_password, display_name, plain_text=True):
         Global.cursor.execute(
             "SELECT * FROM Account WHERE username = %s",
@@ -50,7 +49,6 @@ class Account:
 
         return True, ""
 
-    @staticmethod
     def remove(username):
         try:
             Global.cursor.execute(
@@ -72,7 +70,6 @@ class Account:
             Global.db.rollback()
         return False
 
-    @staticmethod
     def validate(username, password_hash):
         Global.cursor.execute(
             "SELECT username, salt, hash FROM Account WHERE username = %s;",
@@ -89,7 +86,6 @@ class Account:
             logging.error("user \"" + username + "\" not found")
         return False
 
-    @staticmethod
     def get_all_as_string():
         Global.cursor.execute("SELECT username, displayName, salt, hash FROM Account;")
         result = Global.cursor.fetchall()
