@@ -65,7 +65,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             for action in self.possible_action:
                 if form.getvalue("action") == action:
                     is_valid_action = True
-            if Global.handler.has_action(form.getvalue("action")):
+            if Global.app_handler.has_action(form.getvalue("action")):
                     is_valid_action = True
             logging.info("Received " + ("valid" if is_valid_action else "invalid") + " \"" + form.getvalue("action") + "\" request.")
 
@@ -143,7 +143,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(bytes(json_response, Global.encoding))
                 elif form.getvalue("action") == "DeleteAccount":
                     try:
-                        Global.handler.on_remove_user(form.getvalue("username")) ## cleanup app-specific user data
+                        Global.app_handler.on_remove_user(form.getvalue("username")) ## cleanup app-specific user data
                         Account.remove(form.getvalue("username"))
                         self.send_response_only(200) ## OK
                         self.end_headers()
@@ -156,7 +156,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                         self.end_headers()
                 ## pass secured actions to app-specific request handler
                 elif is_valid_action:
-                    Global.handler.handle_action(self, form)
+                    Global.app_handler.handle_action(self, form)
                 else:
                     self.send_response_only(400) ## Bad Request
                     self.end_headers()

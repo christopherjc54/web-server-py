@@ -18,7 +18,7 @@ class Global(object):
     cursor = None
     encoding = "utf-8"
     config = None
-    handler = None ## instance of the application-specific request handler class
+    app_handler = None
 
 class Database:
 
@@ -73,7 +73,7 @@ except:
     logging.critical("Couldn't read config file.")
     exit(-1)
 handler_class = locate(Global.config.get("app_request_handler", "module_name") + "." + Global.config.get("app_request_handler", "class_name"))
-Global.handler = handler_class()
+Global.app_handler = handler_class()
 Database.connect()
 if not (Global.db and Global.cursor):
     exit(-1)
@@ -89,7 +89,7 @@ if Global.config.getboolean("server", "run_tests_on_startup"):
     print()
     Account.remove(test_username)
 
-## run https server
+## run http(s) server
 httpd = None
 try:
     httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), SimpleHTTPRequestHandler)
