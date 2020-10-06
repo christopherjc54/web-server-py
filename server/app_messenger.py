@@ -14,6 +14,7 @@ class MessengerAppRequestHandler(AppRequestHandler):
     possible_actions = (
         "Action",
         "SendMessage",
+        "DeleteMessage",
         "GetNewMessages",
         "GetAllMessages",
         "SendFile",
@@ -44,6 +45,9 @@ class MessengerAppRequestHandler(AppRequestHandler):
                 request.wfile.write(bytes(json_response, Global.encoding))
             
             elif form.getvalue("action") == "SendMessage":
+                raise NotImplementedError
+            
+            elif form.getvalue("action") == "DeleteMessage":
                 raise NotImplementedError
             
             elif form.getvalue("action") == "GetNewMessages":

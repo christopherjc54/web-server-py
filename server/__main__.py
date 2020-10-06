@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from http.server import ThreadingHTTPServer
+from pydoc import locate
 import ssl
 import mysql.connector
 import hashlib
@@ -56,10 +57,11 @@ Global.config.setdefault("server", {
     "run_tests_on_startup": "false",
     "address": "localhost",
     "port": "443",
+    "ssl_enabled": "true",
     "ssl_key_file": "private_key.pem",
     "ssl_cert_file": "cert.pem"
 })
-Global.config.setdefault("request_handler", {
+Global.config.setdefault("app_request_handler", {
     "module_name": "app_default",
     "class_name": "AppRequestHandler"
 })
@@ -70,10 +72,10 @@ try:
 except:
     logging.critical("Couldn't read config file.")
     exit(-1)
-handler_class = locate(Global.config.get("request_handler", "module_name") + "." + Global.config.get("request_handler", "class_name"))
+handler_class = locate(Global.config.get("app_request_handler", "module_name") + "." + Global.config.get("app_request_handler", "class_name"))
 Global.handler = handler_class()
 Database.connect()
-if not (Global.db or Global.cursor):
+if not (Global.db and Global.cursor):
     exit(-1)
 Session.delete_all_expired()
 
@@ -91,13 +93,15 @@ if Global.config.getboolean("server", "run_tests_on_startup"):
 httpd = None
 try:
     httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), SimpleHTTPRequestHandler)
-    httpd.socket = ssl.wrap_socket(
-        httpd.socket,
-        keyfile=Global.config.get("server", "ssl_key_file"),
-        certfile=Global.config.get("server", "ssl_cert_file"),
-        server_side=True
-    )
-    logging.info("Waiting for HTTPS requests...")
+    ssl_enabled = Global.config.getboolean("server", "ssl_enabled")
+    if ssl_enabled:
+        httpd.socket = ssl.wrap_socket(
+            httpd.socket,
+            keyfile=Global.config.get("server", "ssl_key_file"),
+            certfile=Global.config.get("server", "ssl_cert_file"),
+            server_side=True
+        )
+    logging.info("Waiting for HTTP" + ("S" if ssl_enabled else "") + " requests...")
     httpd.serve_forever()
 except DatabaseConnectionLostException:
     pass ## shutdown server since all it does is handle db related requests

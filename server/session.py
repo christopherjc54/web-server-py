@@ -25,7 +25,7 @@ class Session:
 
     def validate(username, sessionID):
         Global.cursor.execute(
-            "SELECT sessionID, expDateTime FROM Session WHERE username = %s AND sessionID = %s;",
+            "SELECT sessionID, expDateTime FROM Session WHERE username = %s AND sessionID = %s ORDER BY id;",
             (username, sessionID)
         )
         result = Global.cursor.fetchall()
@@ -57,7 +57,7 @@ class Session:
         Global.db.commit()
 
     def delete_all_expired():
-        Global.cursor.execute("SELECT username, sessionID, expDateTime FROM Session;")
+        Global.cursor.execute("SELECT username, sessionID, expDateTime FROM Session ORDER BY id;")
         result = Global.cursor.fetchall()
         for db_username, db_sessionID, db_expDateTime in result:
             if(db_expDateTime < datetime.datetime.now()):

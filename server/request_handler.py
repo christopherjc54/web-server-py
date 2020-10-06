@@ -4,7 +4,6 @@ from http.server import BaseHTTPRequestHandler
 import cgi
 import logging
 import json
-from pydoc import locate
 
 from __main__ import Global, Database
 from account import *
@@ -44,7 +43,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         self.send_response_only(200) ## OK
         self.end_headers()
-        self.wfile.write(bytes(Account.get_all_accounts(), Global.encoding))
+        self.wfile.write(bytes(Account.get_all_as_string(), Global.encoding))
 
     def do_POST(self):
         self.check_db_connection()
@@ -59,6 +58,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         try:
             if form.getvalue("username") == None or form.getvalue("action") == None:
+                logging.info("Received invalid request.")
                 raise MissingHeaderException
 
             is_valid_action = False
@@ -169,6 +169,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(bytes(json_response, Global.encoding))
             
         except MissingHeaderException:
+            logging.info("Request was missing headers.")
             self.send_response_only(400) ## Bad Request
             self.end_headers()
             json_response = json.dumps({

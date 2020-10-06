@@ -11,6 +11,7 @@ import json
 ## config
 server_address = "localhost"
 server_port = 4443
+ssl_enabled = False
 ssl_cert_file = "ssl/cert.pem"
 
 ## session globals
@@ -26,6 +27,7 @@ commands = (
     "CreateAccountInsecure",
     "Action",
     "DeleteAccount",
+    "SendMessage",
     "help",
     "exit"
 )
@@ -43,10 +45,13 @@ def print_help():
 ## setup
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 try:
-    ssl_context = ssl.create_default_context()
-    ssl_context.load_verify_locations(ssl_cert_file)
-    ssl_context.check_hostname = False
-    connection = http.client.HTTPSConnection(server_address, server_port, context=ssl_context)
+    if ssl_enabled:
+        ssl_context = ssl.create_default_context()
+        ssl_context.load_verify_locations(ssl_cert_file)
+        ssl_context.check_hostname = False
+        connection = http.client.HTTPSConnection(server_address, server_port, context=ssl_context)
+    else:
+        connection = http.client.HTTPConnection(server_address, server_port)
 except ssl.SSLError as e:
     logging.error(e)
     logging.error("Failed to secure connection request.")
@@ -148,7 +153,7 @@ try:
             except:
                 logging.error(str(response.status) + " " + str(response.reason))
         
-        elif input_cmd == "Action":
+        elif input_cmd == "Action" or input_cmd == "SendMessage": ## "SendMessage" to see NotImplementedError
             params = urllib.parse.urlencode({
                 "username": username,
                 "sessionID": sessionID,
