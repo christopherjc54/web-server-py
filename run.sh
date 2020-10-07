@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # sudo apt install python3 python3-pip mysql-server
+# python3 -m pip install -U cffi pip setuptools
 # python3 -m pip install mysql-connector-python
+# python3 -m pip install argon2-cffi
 
 sudo service mysql start
 
