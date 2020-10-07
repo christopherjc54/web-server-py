@@ -17,7 +17,7 @@ Any GET request will return a list of all usernames and passwords in the form th
   - max size: 256 characters
 - [passwordHash]
   - required for ```CreateUserSecure``` and ```Login```
-  - password should be pre-hashed with SHA-256
+  - password should be pre-hashed with SHA3-512
 - [sessionID]
   - required for all actions except ```CreateUserInsecure```, ```CreateUserSecure```, and ```Login```
 
@@ -37,7 +37,7 @@ Any GET request will return a list of all usernames and passwords in the form th
     - username
     - sessionID
 - ```CreateUserSecure```
-  - uses pre-hashed SHA-256 password to add new account to database
+  - uses pre-hashed SHA3-512 password to add new account to database
   - POST form-data keys:
     - action
     - username

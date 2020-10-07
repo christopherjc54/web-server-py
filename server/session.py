@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import mysql.connector
-import random, string
+import secrets
 import datetime
 import logging
 
@@ -10,7 +10,7 @@ from __main__ import Global
 class Session:
 
     def create(username, datetime_offset=datetime.timedelta(days=1, hours=0)):
-        sessionID = ''.join(random.SystemRandom().choice(string.hexdigits) for _ in range(32))
+        sessionID = secrets.token_hex(int(32/2)) ## each byte gets converted to two hex digits
         expDateTime = datetime.datetime.now() + datetime_offset
         try:
             Global.cursor.execute(

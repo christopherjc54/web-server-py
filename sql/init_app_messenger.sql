@@ -1,10 +1,10 @@
--- configure "Messenger" application database tables and procedures
+-- configure "Messenger" application database tables and procedures after logging in as "user"
 
 USE `DatabaseServer`;
 
 DROP TABLE IF EXISTS `Message`;
-CREATE TABLE `Message` (                    -- doesn't have foreign keys on usernames because messages still exist after user is deleted
-                                            -- should probably check for orphan messages when deleting a user (also prevents creating new account to view old messages)
+CREATE TABLE `Message` (                        -- doesn't have foreign keys on usernames because messages still exist after user is deleted
+                                                -- should probably check for orphan messages when deleting a user (also prevents creating new account to view old messages)
     `id` INT NOT NULL AUTO_INCREMENT,
     `fromUsername` VARCHAR(15),
     `toUsername` VARCHAR(15),
@@ -17,7 +17,7 @@ CREATE TABLE `Message` (                    -- doesn't have foreign keys on user
 DROP PROCEDURE IF EXISTS `DeleteOrphanMessages`;
 DELIMITER $$ ;
 CREATE PROCEDURE `DeleteOrphanMessages`(
-    IN sp_username VARCHAR(15)             -- optimizes deletion...maybe
+    IN sp_username VARCHAR(15)                  -- optimizes deletion...maybe
 )
 BEGIN
     DELETE m
