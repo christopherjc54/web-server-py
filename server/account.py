@@ -71,8 +71,10 @@ class Account:
         if plain_text:
             logging.debug("  Password: " + original_password)
         logging.debug("  Hashed Password: " + hashed_password)
-        if salt_method.lower() is not "argon2":
+        if salt_method.lower() != "argon2":
             logging.debug("  Salt: " + salt)
+        else:
+            logging.debug("  Embedded Salt: " + salt)
         logging.debug("  Hash: " + hash)
         print()
 
