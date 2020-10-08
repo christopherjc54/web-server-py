@@ -62,10 +62,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 raise MissingHeaderException
 
             is_valid_action = False
-            for action in self.possible_action:
+            for action in self.possible_action + Global.app_handler.possible_actions:
                 if form.getvalue("action") == action:
-                    is_valid_action = True
-            if Global.app_handler.has_action(form.getvalue("action")):
                     is_valid_action = True
             logging.info("Received " + ("valid" if is_valid_action else "invalid") + " \"" + form.getvalue("action") + "\" request.")
 
@@ -128,7 +126,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(bytes(json_response, Global.encoding))
                 return
 
-            ## important security note: sessions are still vulnerable to forgery or replay attacks if not secured with TLS/SSL
+            ## important security note: credentials and sessions are vulnerable to forgery or replay attacks if not secured with TLS/SSL
             if Session.validate(form.getvalue("username"), form.getvalue("sessionID")):
                 if form.getvalue("sessionID") == None:
                     raise MissingHeaderException
@@ -151,7 +149,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                             "message": "account deleted"
                         })
                         self.wfile.write(bytes(json_response, Global.encoding))
-                    except:
+                    except Exception as e:
+                        logging.error(e)
                         self.send_response_only(500) ## Internal Server Error
                         self.end_headers()
                 ## pass secured actions to app-specific request handler

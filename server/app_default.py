@@ -14,14 +14,8 @@ class AppRequestHandler:
     possible_actions = ( ## tuples with one item should have a comma
         "Action",
     )
-
-    def has_action(self, input_action):
-        for action in self.possible_actions:
-            if input_action == action:
-                return True
-        return False
     
-    def on_remove_user():
+    def on_remove_user(self, username):
         pass
 
     def handle_action(self, request, form):

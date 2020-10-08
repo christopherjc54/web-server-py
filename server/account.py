@@ -129,9 +129,9 @@ class Account:
                     else:
                         logging.critical("Salt method is invalid.")
                         raise Exception
-            logging.error("\"" + username + "\" tried logging in with wrong password")
+            logging.info("\"" + username + "\" tried logging in with wrong password")
         else:
-            logging.error("user \"" + username + "\" not found")
+            logging.info("user \"" + username + "\" not found")
         return False
 
     def get_all_as_string():

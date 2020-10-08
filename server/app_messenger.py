@@ -21,7 +21,7 @@ class MessengerAppRequestHandler(AppRequestHandler):
         "GetFile"
     )
 
-    def on_remove_user(username):
+    def on_remove_user(self, username):
         try:
             Global.cursor.execute(
                 "CALL DeleteOrphanMessages(%s);",

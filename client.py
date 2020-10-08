@@ -111,7 +111,7 @@ try:
             try:
                 json_response = json.loads(response.read().decode(encoding))
                 if response.status == 200:
-                    username = sessionID = ""
+                    sessionID = ""
                     print(json_response["message"])
                 else:
                     logging.error(str(response.status) + " " + str(response.reason))
