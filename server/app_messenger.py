@@ -29,9 +29,8 @@ class MessengerAppRequestHandler(AppRequestHandler):
             )
             Global.db.commit()
         except mysql.connector.Error as e:
-            logging.critical(e.msg)
             Global.db.rollback()
-            raise Exception
+            raise Exception(e.msg)
 
     def handle_action(self, request, form):
         try:

@@ -150,7 +150,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                         })
                         self.wfile.write(bytes(json_response, Global.encoding))
                     except Exception as e:
-                        logging.error(e)
+                        logging.critical(e)
                         self.send_response_only(500) ## Internal Server Error
                         self.end_headers()
                 ## pass secured actions to app-specific request handler
