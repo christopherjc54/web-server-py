@@ -110,26 +110,25 @@ class Account:
             if not salt_method_auto_read:
                 salt_method = Global.config.get("miscellaneous", "salt_method")
             for db_username, db_salt, db_hash in result:
-                try:
+                if db_username == username:
                     if salt_method_auto_read:
                         salt_method = ("argon2" if db_hash.startswith("$argon2") else "SHA-512")
-                    passwords_matched = False
                     if salt_method.upper() == "SHA-512":
                         if db_hash == hashlib.sha512(password_hash.encode(Global.encoding) + db_salt.encode(Global.encoding)).hexdigest():
-                            passwords_matched = True
+                            return True
                     elif salt_method.lower() == "argon2":
-                        passwords_matched = argon2.verify_password(
-                            db_hash.encode(Global.encoding),
-                            password_hash.encode(Global.encoding),
-                            type=Type.ID
-                        )
+                        try:
+                            argon2.verify_password(
+                                db_hash.encode(Global.encoding),
+                                password_hash.encode(Global.encoding),
+                                type=Type.ID
+                            )
+                        except argon2.exceptions.VerificationError:
+                            continue
+                        return True
                     else:
                         logging.critical("Salt method is invalid.")
                         raise Exception
-                    if db_username == username and passwords_matched:
-                        return True
-                except argon2.exceptions.VerificationError:
-                    pass
             logging.error("\"" + username + "\" tried logging in with wrong password")
         else:
             logging.error("user \"" + username + "\" not found")
