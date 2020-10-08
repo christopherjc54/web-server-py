@@ -12,9 +12,9 @@ CREATE TABLE `Account` (
     `displayName` VARCHAR(32),
     `salt` VARCHAR(16),                         -- 4 bytes * 2^4 bits for hex digits => 64 bits minimum entropy
                                                 -- 16 hex chars * 2^4 bits = 256 bits > 64 bits
-    `hash` VARCHAR(128),                        -- SHA3-512 hex digest
-                                                -- SHA3-256/SHA3-512 not susceptible to collision attacks (like MD5 is) or length extension attacks (like SHA-256 is)
-                                                -- SHA3-512 only takes about twice as long as SHA-256 or SHA3-256 => O(2n) => linear time
+    `hash` VARCHAR(128),                        -- SHA-512 hex digest (Java doesn't support SHA3-512 message digests)
+                                                -- SHA3-256/SHA-512/SHA3-512 not susceptible to collision attacks (like MD5 is) or length extension attacks (like SHA-256 is)
+                                                -- SHA-512/SHA3-512 only takes about twice as long as SHA-256/SHA3-256 => O(2n) => linear time
                                                 -- 512 bit output / 4 bits per hex digit = 128 hex digits
     PRIMARY KEY (`username`),
     UNIQUE (`id`, `username`, `displayName`)

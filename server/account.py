@@ -29,19 +29,20 @@ class Account:
             return False, error_message
         salt = secrets.token_hex(int(16/2)) ## each byte gets converted to two hex digits
         if plain_text:
-            hashed_password = hashlib.sha3_512(original_password.encode(Global.encoding)).hexdigest()
+            hashed_password = hashlib.sha512(original_password.encode(Global.encoding)).hexdigest()
         else:
             hashed_password = original_password
         salt_method = Global.config.get("miscellaneous", "salt_method")
         try:
-            if salt_method.upper() == "SHA3-512":
-                hash = hashlib.sha3_512(hashed_password.encode(Global.encoding) + salt.encode(Global.encoding)).hexdigest()
+            if salt_method.upper() == "SHA-512":
+                hash = hashlib.sha512(hashed_password.encode(Global.encoding) + salt.encode(Global.encoding)).hexdigest()
                 Global.cursor.execute(
                     "INSERT INTO Account (username, displayName, salt, hash) VALUES (%s, %s, %s, %s);",
                     (username, display_name, salt, hash)
                 )
             elif salt_method.lower() == "argon2":
-                ## don't change type as Type.ID is the most secure, but you may change other parameters without resetting/migrating the database
+                ## https://argon2-cffi.readthedocs.io/en/stable/argon2.html
+                ## don't change type because Type.ID is the most secure, other parameters may be changed without resetting/migrating the database
                 hash = argon2.hash_password(
                     password=hashed_password.encode(Global.encoding),
                     salt=salt.encode(Global.encoding),
@@ -111,10 +112,10 @@ class Account:
             for db_username, db_salt, db_hash in result:
                 try:
                     if salt_method_auto_read:
-                        salt_method = ("argon2" if db_hash.startswith("$argon2") else "SHA3-512")
+                        salt_method = ("argon2" if db_hash.startswith("$argon2") else "SHA-512")
                     passwords_matched = False
-                    if salt_method.upper() == "SHA3-512":
-                        if db_hash == hashlib.sha3_512(password_hash.encode(Global.encoding) + db_salt.encode(Global.encoding)).hexdigest():
+                    if salt_method.upper() == "SHA-512":
+                        if db_hash == hashlib.sha512(password_hash.encode(Global.encoding) + db_salt.encode(Global.encoding)).hexdigest():
                             passwords_matched = True
                     elif salt_method.lower() == "argon2":
                         passwords_matched = argon2.verify_password(

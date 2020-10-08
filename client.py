@@ -77,7 +77,7 @@ try:
             
         if input_cmd == "Login":
             username = input("Enter username: ")
-            passwordHash = hashlib.sha3_512(getpass("Enter password: ").encode(encoding)).hexdigest()
+            passwordHash = hashlib.sha512(getpass("Enter password: ").encode(encoding)).hexdigest()
             params = urllib.parse.urlencode({
                 "username": username,
                 "passwordHash": passwordHash,
@@ -132,7 +132,7 @@ try:
                     print("Passwords did not match, please try again.")
             display_name = input("Enter display name: ")
             if is_secure:
-                password = hashlib.sha3_512(password.encode(encoding)).hexdigest()
+                password = hashlib.sha512(password.encode(encoding)).hexdigest()
             params = urllib.parse.urlencode({
                 "username": username,
                 "passwordHash" if is_secure else "password": password,

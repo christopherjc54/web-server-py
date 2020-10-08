@@ -66,7 +66,7 @@ Global.config.setdefault("app_request_handler", {
     "class_name": "AppRequestHandler"
 })
 Global.config.setdefault("miscellaneous", {
-    "salt_method": "SHA3-512",
+    "salt_method": "SHA-512",
     "salt_method_auto_read": "true"
 })
 try:
@@ -87,7 +87,7 @@ Session.delete_all_expired()
 if Global.config.getboolean("server", "run_tests_on_startup"):
     test_username, test_password = "testaccount", "badpassword1"
     Account.add(test_username, test_password, "John Doe")
-    logging.debug("test account validated? " + str(Account.validate(test_username, hashlib.sha3_512(test_password.encode(Global.encoding)).hexdigest())))
+    logging.debug("test account validated? " + str(Account.validate(test_username, hashlib.sha512(test_password.encode(Global.encoding)).hexdigest())))
     print()
     Session.test(test_username)
     print()
@@ -95,9 +95,9 @@ if Global.config.getboolean("server", "run_tests_on_startup"):
 
 ## run http(s) server
 httpd = None
+ssl_enabled = Global.config.getboolean("server", "ssl_enabled")
 try:
     httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), SimpleHTTPRequestHandler)
-    ssl_enabled = Global.config.getboolean("server", "ssl_enabled")
     if ssl_enabled:
         httpd.socket = ssl.wrap_socket(
             httpd.socket,
@@ -116,7 +116,7 @@ except Exception as e:
 ## make sure sockets and db close properly
 if httpd is not None:
     httpd.server_close()
-    logging.info("Closed HTTPS server.")
+    logging.info("Closed HTTP" + ("S" if ssl_enabled else "") + " server.")
 if Global.cursor is not None:
     Global.cursor.close()
 if Global.db is not None:
