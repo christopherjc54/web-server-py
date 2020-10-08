@@ -52,8 +52,8 @@ Global.config.setdefault("server", {
     "address": "localhost",
     "port": "443",
     "ssl_enabled": "true",
-    "ssl_key_file": "private_key.pem",
-    "ssl_cert_file": "cert.pem"
+    "ssl_key_file": "ssl/private_key.pem",
+    "ssl_cert_file": "ssl/cert.pem"
 })
 Global.config.setdefault("database", {
     "address": "localhost",

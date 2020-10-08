@@ -12,7 +12,6 @@ sudo service mysql start
 # sudo mysql < sql/init_user.sql                                ## add user as root
 mysql -u user --password=1234 < sql/init_db.sql                 ## create/clean database
 mysql -u user --password=1234 < sql/init_app_messenger.sql      ## "messenger" app-specific db config
-# mysql -u user --password=1234 < sql/init_data.sql             ## add sample data if needed
 
 # openssl genrsa -out ssl/private_key.pem 2048
 # openssl req -new -x509 -key ssl/private_key.pem -out ssl/cert.pem -days 360
