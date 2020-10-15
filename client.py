@@ -17,7 +17,7 @@ ssl_cert_file = "ssl/cert.pem"
 username = ""
 sessionID = ""
 
-## globals
+## program globals
 commands = (
     "Login",
     "Logout",
@@ -26,6 +26,7 @@ commands = (
     "Action",
     "DeleteAccount",
     "SendMessage",
+    "GetMessages",
     "help",
     "exit"
 )
@@ -188,7 +189,11 @@ try:
                 logging.error(str(response.status_code) + " " + str(response.reason))
 
         elif input_cmd == "SendMessage":
-            recipient = input("Enter recipient's username: ")
+            recipient_list = list()
+            while True:
+                recipient_list.append(input("Enter recipient's username: "))
+                if not prompt_yes_no("Do you want to send message to someone else?"):
+                    break
             message_content = input("Enter message: ")
             upload_file = prompt_yes_no("Do you want to upload a file?")
             file_list = list()
@@ -206,7 +211,7 @@ try:
                     "username": username,
                     "sessionID": sessionID,
                     "action": input_cmd,
-                    "recipient": recipient,
+                    "recipients": str(recipient_list),
                     "messageContent": message_content,
                     "uploadedFiles": str(file_list)
                 },
@@ -217,6 +222,41 @@ try:
                 json_response = json.loads(response.content.decode(encoding))
                 if response.status_code < 300:
                     print(json_response["message"])
+                    print("messageID: " + str(json_response["messageID"]))
+                else:
+                    logging.error(str(response.status_code) + " " + str(response.reason))
+                    logging.error(json_response["errorMessage"])
+            except:
+                logging.error(str(response.status_code) + " " + str(response.reason))
+
+        elif input_cmd == "GetMessages":
+            get_one_message = prompt_yes_no("Do you want to get just one message?")
+            message_id = None
+            get_only_new_message = None
+            if get_one_message:
+                message_id = input("Please enter the ID of the message you want: ")
+            else:
+                get_only_new_message = prompt_yes_no("Do you want to only unread messages?")
+            get_file_content = prompt_yes_no("Do you want to also fetch the file contents?")
+            response = requests.post(
+                url=server_url,
+                data={
+                    "username": username,
+                    "sessionID": sessionID,
+                    "action": input_cmd,
+                    "getOneMessage": str(get_one_message),
+                    "messageID": message_id,
+                    "getOnlyNewMessages" : str(get_only_new_message),
+                    "getFileContent": str(get_file_content)
+                },
+                cert=(ssl_cert_file if ssl_enabled else None)
+            )
+            try:
+                json_response = json.loads(response.content.decode(encoding))
+                if response.status_code < 300:
+                    print(json_response["message"])
+                    print("RAW Response:")
+                    print(json.dumps(json_response, indent=3))
                 else:
                     logging.error(str(response.status_code) + " " + str(response.reason))
                     logging.error(json_response["errorMessage"])

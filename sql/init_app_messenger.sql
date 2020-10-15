@@ -24,7 +24,8 @@ CREATE TABLE `SentItem` (
 DROP TABLE IF EXISTS `Inbox`;
 CREATE TABLE `Inbox` (
     `id` INT NOT NULL AUTO_INCREMENT,
-    `username` VARCHAR(15),
+    `fromUsername` VARCHAR(15),
+    `toUsername` VARCHAR(15),
     `messageID` INT,
     `messageRead` BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (`id`),
@@ -36,7 +37,7 @@ CREATE TABLE `File` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `messageID` INT,
     `fileName` VARCHAR(50),
-    `fileID` VARCHAR(33),
+    `remoteFileID` VARCHAR(33),
     PRIMARY KEY (`id`),
     UNIQUE (`id`)
 );
