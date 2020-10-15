@@ -2,8 +2,7 @@
 
 # sudo apt install python3 python3-pip mysql-server openssl
 # python3 -m pip install --upgrade pip setuptools cffi
-# python3 -m pip install mysql-connector-python argon2-cffi pyseaweed
-# python3 -m pip install requests
+# python3 -m pip install mysql-connector-python argon2-cffi pyseaweed requests
 
 sudo service mysql start
 
