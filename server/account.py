@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-import mysql.connector
 import secrets
 import hashlib
 import logging
+
+import mysql.connector
 import argon2
 from argon2._password_hasher import (
     DEFAULT_HASH_LENGTH,
@@ -28,14 +29,19 @@ class Account:
             logging.error(error_message)
             return False, error_message
         salt = secrets.token_hex(int(16/2)) ## each byte gets converted to two hex digits
+        sha_function = Global.config.get("miscellaneous", "sha_function")
+        if sha_function.upper().startswith("SHA3"):
+            hash_function = getattr(hashlib, sha_function.lower().replace("-", "_"))
+        else:
+            hash_function = getattr(hashlib, sha_function.lower().replace("-", ""))
         if plain_text:
-            hashed_password = hashlib.sha512(original_password.encode(Global.encoding)).hexdigest()
+            hashed_password = hash_function(original_password.encode(Global.encoding)).hexdigest()
         else:
             hashed_password = original_password
         salt_method = Global.config.get("miscellaneous", "salt_method")
         try:
-            if salt_method.upper() == "SHA-512":
-                hash = hashlib.sha512(hashed_password.encode(Global.encoding) + salt.encode(Global.encoding)).hexdigest()
+            if salt_method.upper().startswith("SHA"):
+                hash = hash_function(hashed_password.encode(Global.encoding) + salt.encode(Global.encoding)).hexdigest()
                 Global.cursor.execute(
                     "INSERT INTO Account (username, displayName, salt, hash) VALUES (%s, %s, %s, %s);",
                     (username, display_name, salt, hash)
@@ -111,10 +117,15 @@ class Account:
                 salt_method = Global.config.get("miscellaneous", "salt_method")
             for db_username, db_salt, db_hash in result:
                 if db_username == username:
+                    sha_function = Global.config.get("miscellaneous", "sha_function")
                     if salt_method_auto_read:
-                        salt_method = ("argon2" if db_hash.startswith("$argon2") else "SHA-512")
-                    if salt_method.upper() == "SHA-512":
-                        if db_hash == hashlib.sha512(password_hash.encode(Global.encoding) + db_salt.encode(Global.encoding)).hexdigest():
+                        salt_method = ("argon2" if db_hash.startswith("$argon2") else sha_function)
+                    if salt_method.upper().startswith("SHA"):
+                        if sha_function.upper().startswith("SHA3"):
+                            hash_function = getattr(hashlib, sha_function.lower().replace("-", "_"))
+                        else:
+                            hash_function = getattr(hashlib, sha_function.lower().replace("-", ""))
+                        if db_hash == hash_function(password_hash.encode(Global.encoding) + db_salt.encode(Global.encoding)).hexdigest():
                             return True
                     elif salt_method.lower() == "argon2":
                         try:

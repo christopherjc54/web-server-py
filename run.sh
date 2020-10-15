@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# sudo apt install python3 python3-pip mysql-server
-# python3 -m pip install -U cffi pip setuptools
-# python3 -m pip install mysql-connector-python
-# python3 -m pip install argon2-cffi
+# sudo apt install python3 python3-pip mysql-server openssl
+# python3 -m pip install --upgrade pip setuptools cffi
+# python3 -m pip install mysql-connector-python argon2-cffi pyseaweed
+# python3 -m pip install requests
 
 sudo service mysql start
 
@@ -14,7 +14,7 @@ mysql -u user --password=1234 < sql/init_db.sql                 ## create/clean 
 mysql -u user --password=1234 < sql/init_app_messenger.sql      ## "messenger" app-specific db config
 
 # openssl genrsa -out ssl/private_key.pem 2048
-# openssl req -new -x509 -key ssl/private_key.pem -out ssl/cert.pem -days 360
+# openssl req -new -x509 -key ssl/private_key.pem -out ssl/cert.pem -days 365
 
 python3 server
 

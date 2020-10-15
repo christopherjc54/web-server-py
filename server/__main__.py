@@ -3,22 +3,23 @@
 from http.server import ThreadingHTTPServer
 from pydoc import locate
 import ssl
-import mysql.connector
 import hashlib
 import logging
 import configparser
-import os.path
+import os
+import argparse
 
-## classes in main must be defined before project imports to avoid circular import errors
+import mysql.connector
 
-## program globals
 class Global(object):
 
+    ## program globals
+    args = None
+    config = None
+    app_handler = None
     db = None
     cursor = None
     encoding = "utf-8"
-    config = None
-    app_handler = None
 
 class Database:
 
@@ -32,20 +33,20 @@ class Database:
             )
             Global.cursor = Global.db.cursor()
             logging.info("Connected to database.")
-        except Exception as e:
-            logging.critical(e)
+        except mysql.connector.Error as e:
+            logging.critical(e.msg)
             logging.critical("Couldn't connect to database.")
 
+## classes in main must be defined before project imports to avoid circular import errors
 from account import *
 from session import *
 from request_handler import *
 
-## server globals
-config_filename = "config.ini"
-
-## setup
+## setup logging
 logging.basicConfig(format='%(levelname)-8s: %(message)s', level=logging.DEBUG)
 # logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+
+## setup configuration
 Global.config = configparser.ConfigParser(comment_prefixes="#", inline_comment_prefixes="#")
 Global.config.setdefault("server", {
     "run_tests_on_startup": "false",
@@ -66,16 +67,41 @@ Global.config.setdefault("app_request_handler", {
     "class_name": "AppRequestHandler"
 })
 Global.config.setdefault("miscellaneous", {
-    "salt_method": "SHA-512",
-    "salt_method_auto_read": "true"
+    "salt_method": "SHA",
+    "salt_method_auto_read": "true",
+    "sha_function": "SHA-512",
+    "seaweedfs_address": "localhost",
+    "seaweedfs_port": "9333"
 })
-try:
-    if not os.path.exists(config_filename):
-        raise Exception
-    Global.config.read(config_filename)
-except:
-    logging.critical("Couldn't read config file.")
-    exit(-1)
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-c", "--config", metavar="filename",
+    help="specify a custom configuration file",
+    default="config.ini",
+    dest="config_filename"
+)
+Global.args = parser.parse_args()
+if not os.path.exists(Global.args.config_filename):
+    logging.info("Couldn't read config file.")
+    print("Do you want to use the default configuration?")
+    print("THIS MAY DAMAGE YOUR CUSTOM APP")
+    while True:
+        response = input("yes/no: ")
+        if response == "yes":
+            logging.info("Using default configuration file.")
+            break
+        elif response == "no":
+            exit(-1)
+        else:
+            print("Invalid response, please try again.")
+else:
+    try:
+        Global.config.read(Global.args.config_filename)
+    except:
+        logging.error("Couldn't read config file.")
+        exit(-1)
+
+## setup everything else
 handler_class = locate(Global.config.get("app_request_handler", "module_name") + "." + Global.config.get("app_request_handler", "class_name"))
 Global.app_handler = handler_class()
 Database.connect()
@@ -97,7 +123,7 @@ if Global.config.getboolean("server", "run_tests_on_startup"):
 httpd = None
 ssl_enabled = Global.config.getboolean("server", "ssl_enabled")
 try:
-    httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), SimpleHTTPRequestHandler)
+    httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), RequestHandler)
     if ssl_enabled:
         httpd.socket = ssl.wrap_socket(
             httpd.socket,
@@ -112,7 +138,7 @@ except DatabaseConnectionLostException:
 except KeyboardInterrupt:
     print() ## put bash shell's "^C" on its own line
 except Exception as e:
-    logging.critical(e.msg)
+    logging.critical(e)
 ## make sure sockets and db close properly
 if httpd is not None:
     httpd.server_close()

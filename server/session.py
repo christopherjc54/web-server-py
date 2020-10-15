@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-import mysql.connector
 import secrets
 import datetime
 import logging
+
+import mysql.connector
 
 from __main__ import Global
 
@@ -68,9 +69,10 @@ class Session:
         expDateTimeSQL = "SELECT expDateTime FROM Session WHERE sessionID = %s;"
 
         sessionID = Session.create(username)
+        logging.debug("sessionID: " + sessionID)
+        
         Global.cursor.execute(expDateTimeSQL, (sessionID,))
         result = Global.cursor.fetchall()
-        logging.debug("sessionID: " + sessionID)
         logging.debug("expDateTime: " + str(result[0][0]))
         logging.debug("valid session? " + str(Session.validate(username, sessionID)))
 
