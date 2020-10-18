@@ -2,7 +2,7 @@
 
 import logging
 import json
-import datetime
+import base64
 
 import mysql.connector
 import pyseaweed
@@ -22,7 +22,7 @@ class MessengerApp(AppRequestHandler):
         "SendMessage",
         "DeleteMessage",
         "GetMessages",
-        "GetFile"
+        "MarkAsRead"
     )
     file_server = None
     file_prefix = "files/"
@@ -36,17 +36,80 @@ class MessengerApp(AppRequestHandler):
             use_public_url=True
         )
 
-    @staticmethod
-    def on_remove_user(username):
+    def on_remove_user(self, username):
         try:
             Global.cursor.execute(
-                "CALL DeleteOrphanMessages(%s);",
+                "DELETE FROM SentItem WHERE fromUsername = %s;",
+                (username,)
+            )
+            Global.cursor.execute(
+                "DELETE FROM Inbox WHERE toUsername = %s;",
                 (username,)
             )
             Global.db.commit()
         except mysql.connector.Error as e:
-            # Global.db.rollback()
+            Global.db.rollback()
             raise Exception(e.msg)
+        self.delete_orphan_messages()
+    
+    def delete_orphan_messages(self):
+        logging.info("Deleting orphan messages...")
+        try:
+            Global.cursor.execute(
+                """
+                    SELECT m.id
+                    FROM Message m
+                    JOIN SentItem s ON m.id = s.messageID
+                    LEFT JOIN Account a ON s.fromUsername = a.username
+                    WHERE a.username = NULL
+                    UNION
+                    SELECT m.id
+                    FROM Message m
+                    JOIN Inbox i ON m.id = i.messageID
+                    LEFT JOIN Account a ON i.toUsername = a.username
+                    WHERE a.username = NULL
+                    ORDER BY m.id;
+                """
+            )
+            message_result = Global.cursor.fetchall()
+            for db_messageID in message_result:
+                Global.cursor.execute(
+                    "SELECT id, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
+                    (db_messageID,)
+                )
+                file_result = Global.cursor.fetchall()
+                for db_fileID, db_remoteFileID in file_result:
+                    if self.file_server.file_exists(db_remoteFileID):
+                        if self.file_server.delete_file(db_remoteFileID):
+                            self.file_server.vacuum()
+                            Global.cursor.execute(
+                                "DELETE FROM File WHERE id = %s;",
+                                (db_fileID,)
+                            )
+                        else:
+                            logging.critical("Error deleting remote orphan file.")
+                            raise mysql.connector.Error
+                    else:
+                        logging.critical("Remote orphan file doesn't exist.")
+                        raise mysql.connector.Error
+                Global.cursor.execute(
+                    "DELETE FROM Message WHERE id = %s;",
+                    (db_messageID,)
+                )
+            Global.db.commit()
+        except mysql.connector.Error as e:
+            Global.db.rollback()
+            logging.error("Error deleting orphan messages.")
+            raise Exception(e.msg)
+    
+    @staticmethod
+    def get_bool(input):
+        if input.lower() == "true" or input == "1":
+            return True
+        elif input.lower() == "false" or input == "0":
+            return False
+        else:
+            raise BooleanTypeError
 
     def get_file(self, file_id):
         if self.file_server.file_exists(file_id):
@@ -58,15 +121,6 @@ class MessengerApp(AppRequestHandler):
         else:
             logging.error("File doesn't exist.")
             return None
-    
-    @staticmethod
-    def get_bool(input):
-        if input.lower() == "true" or input == "1":
-            return True
-        elif input.lower() == "false" or input == "0":
-            return False
-        else:
-            raise BooleanTypeError
 
     def handle_action(self, url_components, query_components, form_data, request):
         try:
@@ -83,7 +137,8 @@ class MessengerApp(AppRequestHandler):
                 if (
                     form_data.get("recipients") == None or
                     form_data.get("messageContent") == None or
-                    form_data.get("uploadedFiles") == None
+                    form_data.get("uploadedFiles") == None or
+                    form_data.get("fileContent") == None
                 ):
                     raise MissingHeaderException
                 
@@ -93,11 +148,35 @@ class MessengerApp(AppRequestHandler):
                         (form_data.get("messageContent"),)
                     )
                     message_id = Global.cursor.lastrowid
-                    for file_name in json.loads(form_data.get("uploadedFiles").replace("'", "\"")):
+                    for recipient in json.loads(form_data.get("recipients")):
+                        Global.cursor.execute(
+                            "SELECT TRUE FROM Account WHERE username = %s;",
+                            (recipient,)
+                        )
+                        if len(Global.cursor.fetchall()) == 0:
+                            Global.db.rollback()
+                            logging.error("Invalid recipient.")
+                            request.send_response_only(400) ## Bad Request
+                            request.end_headers()
+                            json_response = json.dumps({
+                                "errorMessage": "\"" + recipient + "\" is not a valid account name"
+                            })
+                            request.wfile.write(bytes(json_response, Global.encoding))
+                            return
+                        Global.cursor.execute(
+                            "INSERT INTO SentItem (fromUsername, toUsername, messageID) VALUES (%s, %s, %s);",
+                            (form_data.get("username"), recipient, message_id)
+                        )
+                        Global.cursor.execute(
+                            "INSERT INTO Inbox (fromUsername, toUsername, messageID) VALUES (%s, %s, %s);",
+                            (form_data.get("username"), recipient, message_id)
+                        )
+                    file_content = json.loads(form_data.get("fileContent"))
+                    for file_name in json.loads(form_data.get("uploadedFiles")):
                         logging.info("Uploading \"" + file_name + "\" to file server.")
                         file_id = None
                         try:
-                            file_id = self.file_server.upload_file(stream=form_data.get(self.file_prefix + file_name), name=file_name)
+                            file_id = self.file_server.upload_file(stream=base64.b64decode(file_content[file_name]), name=file_name)
                         except requests.exceptions.ConnectionError:
                             logging.error("Failed to connect to file server.")
                         if file_id is None:
@@ -106,15 +185,6 @@ class MessengerApp(AppRequestHandler):
                         Global.cursor.execute(
                             "INSERT INTO File (messageID, fileName, remoteFileID) VALUES (%s, %s, %s);",
                             (message_id, file_name, file_id)
-                        )
-                    Global.cursor.execute(
-                        "INSERT INTO SentItem (username, messageID) VALUES (%s, %s);",
-                        (form_data.get("username"), message_id)
-                    )
-                    for recipient in json.loads(form_data.get("recipients").replace("'", "\"")):
-                        Global.cursor.execute(
-                            "INSERT INTO Inbox (fromUsername, toUsername, messageID) VALUES (%s, %s, %s);",
-                            (form_data.get("username"), recipient, message_id)
                         )
                     Global.db.commit()
                     request.send_response_only(200) ## OK
@@ -134,9 +204,6 @@ class MessengerApp(AppRequestHandler):
             
             elif form_data.get("action") == "DeleteMessage":
                 raise NotImplementedError
-                if self.file_server.file_exists(file_id):
-                    self.file_server.delete_file(file_id)
-                    self.file_server.vacuum()
             
             elif form_data.get("action") == "GetMessages":
                 if form_data.get("getFileContent") == None or form_data.get("getOneMessage") == None:
@@ -160,8 +227,9 @@ class MessengerApp(AppRequestHandler):
                             SELECT i.messageID, i.fromUsername, m.messageContent, m.sentDateTime, i.messageRead
                             FROM Inbox i, Message m
                             WHERE i.toUsername = %s AND i.messageID = m.id
-                            """ + (( "AND m.id = " + str(int(form_data.get("messageID"))) ) if get_one_message else "") + """
-                            """ + ("AND i.messageRead = false" if get_only_new_messages else "") +  """;
+                            """ + (("AND m.id = " + str(int(form_data.get("messageID")))) if get_one_message else "") + """
+                            """ + ("AND i.messageRead = false" if get_only_new_messages else "") +  """
+                            ORDER BY m.id;
                         """,
                         (form_data.get("username"), )
                     )
@@ -169,7 +237,7 @@ class MessengerApp(AppRequestHandler):
                     message_list = list()
                     for db_messageID, db_fromUsername, db_messageContent, db_sentDateTime, db_messageRead in response_messages:
                         Global.cursor.execute(
-                            "SELECT id, fileName, remoteFileID FROM File WHERE messageID = %s;",
+                            "SELECT id, fileName, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
                             (db_messageID,)
                         )
                         response_files = Global.cursor.fetchall()
@@ -179,10 +247,11 @@ class MessengerApp(AppRequestHandler):
                                 file_list.append({
                                     "fileID": db_fileID,
                                     "fileName": db_fileName,
-                                    "fileContent": (str(self.get_file(db_remoteFileID)) if get_file_content else None)
+                                    "fileContent": (str(base64.b64encode(self.get_file(db_remoteFileID)), encoding=Global.encoding) if get_file_content else None)
                                 })
                         except requests.exceptions.ConnectionError:
                             logging.error("Failed to connect to file server.")
+                            raise mysql.connector.Error
                         message_list.append({
                             "messageID" : db_messageID,
                             "fromUsername": db_fromUsername,
@@ -194,22 +263,38 @@ class MessengerApp(AppRequestHandler):
                     request.send_response_only(200) ## OK
                     request.end_headers()
                     json_response = json.dumps({
-                        "message": "successfully retrieved all messages",
+                        "message": "successfully retrieved message" + ("s" if not get_one_message else ""),
                         "messages": message_list
                     })
                     request.wfile.write(bytes(json_response, Global.encoding))
                 except mysql.connector.Error as e:
-                    logging.error("Error getting all messages.")
+                    logging.error("Error getting message" + ("s" if not get_one_message else "") + ".")
                     if "Unknown error" not in e.msg:
                         logging.error(e)
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
+            
+            elif form_data.get("action") == "MarkAsRead":
+                if form_data.get("messageID") == None or form_data.get("messageRead") == None:
+                    raise MissingHeaderException
+                message_read = self.get_bool(form_data.get("messageRead"))
 
-            elif form_data.get("action") == "GetFile":
-                raise NotImplementedError
-                file = self.get_file(file_id)
-                if file is None:
-                    pass
+                try:
+                    Global.cursor.execute(
+                        "UPDATE Inbox SET messageRead = %s WHERE toUsername = %s AND messageID = %s;",
+                        (("1" if message_read else "0"), form_data.get("username"), form_data.get("messageID"))
+                    )
+                    request.send_response_only(200) ## OK
+                    request.end_headers()
+                    json_response = json.dumps({
+                        "message": "updated message read flag"
+                    })
+                    request.wfile.write(bytes(json_response, Global.encoding))
+                except mysql.connector.Error as e:
+                    logging.error(e.msg)
+                    logging.error("Error marking message as " + ("read" if message_read else "unread") + ".")
+                    request.send_response_only(500) ## Internal Server Error
+                    request.end_headers()
         
         except BooleanTypeError:
             logging.error("BooleanTypeError occured.")

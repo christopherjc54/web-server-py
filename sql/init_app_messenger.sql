@@ -15,9 +15,11 @@ CREATE TABLE `Message` (                        -- doesn't have foreign keys on 
 DROP TABLE IF EXISTS `SentItem`;
 CREATE TABLE `SentItem` (
     `id` INT NOT NULL AUTO_INCREMENT,
-    `username` VARCHAR(15),
+    `fromUsername` VARCHAR(15),
+    `toUsername` VARCHAR(15),
     `messageID` INT,
     PRIMARY KEY (`id`),
+    FOREIGN KEY (`messageID`) REFERENCES Message(`id`),
     UNIQUE (`id`)
 );
 
@@ -29,6 +31,7 @@ CREATE TABLE `Inbox` (
     `messageID` INT,
     `messageRead` BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (`id`),
+    FOREIGN KEY (`messageID`) REFERENCES Message(`id`),
     UNIQUE (`id`)
 );
 
@@ -39,18 +42,6 @@ CREATE TABLE `File` (
     `fileName` VARCHAR(50),
     `remoteFileID` VARCHAR(33),
     PRIMARY KEY (`id`),
+    FOREIGN KEY (`messageID`) REFERENCES Message(`id`),
     UNIQUE (`id`)
 );
-
-DROP PROCEDURE IF EXISTS `DeleteOrphanMessages`;
-DELIMITER $$ ;
-CREATE PROCEDURE `DeleteOrphanMessages` (
-    IN sp_username VARCHAR(15)                  -- optimizes deletion...maybe
-)
-BEGIN
-    -- DELETE m
-    -- FROM Message m
-    -- LEFT JOIN Account a ON m.fromUsername = a.username OR m.toUsername = a.username
-    -- WHERE (m.fromUsername = sp_username OR m.toUsername = sp_username) AND a.username IS NULL;
-END$$
-DELIMITER ; $$

@@ -4,6 +4,8 @@ import getpass
 import hashlib
 import logging
 import json
+import os
+import base64
 
 import requests
 
@@ -197,12 +199,12 @@ try:
             message_content = input("Enter message: ")
             upload_file = prompt_yes_no("Do you want to upload a file?")
             file_list = list()
-            files = dict()
+            file_content = dict()
             if upload_file:
                 while True:
                     file_name = input("Enter file name: ")
                     file_list.append(file_name)
-                    files.update({ "files/" + file_name : open(file_name, "rb") })
+                    file_content.update({ file_name : str(base64.b64encode(open(file_name, "rb").read()), encoding=encoding) })
                     if not prompt_yes_no("Do you want to upload another file?"):
                         break
             response = requests.post(
@@ -211,11 +213,11 @@ try:
                     "username": username,
                     "sessionID": sessionID,
                     "action": input_cmd,
-                    "recipients": str(recipient_list),
+                    "recipients": json.dumps(recipient_list),
                     "messageContent": message_content,
-                    "uploadedFiles": str(file_list)
+                    "uploadedFiles": json.dumps(file_list),
+                    "fileContent": json.dumps(file_content)
                 },
-                files=files,
                 cert=(ssl_cert_file if ssl_enabled else None)
             )
             try:
@@ -230,14 +232,14 @@ try:
                 logging.error(str(response.status_code) + " " + str(response.reason))
 
         elif input_cmd == "GetMessages":
-            get_one_message = prompt_yes_no("Do you want to get just one message?")
+            get_one_message = not prompt_yes_no("Do you want to get all messages?")
             message_id = None
             get_only_new_message = None
             if get_one_message:
                 message_id = input("Please enter the ID of the message you want: ")
             else:
-                get_only_new_message = prompt_yes_no("Do you want to only unread messages?")
-            get_file_content = prompt_yes_no("Do you want to also fetch the file contents?")
+                get_only_new_message = prompt_yes_no("Do you want to get only unread messages?")
+            get_file_content = prompt_yes_no("Do you want to also download attached files?")
             response = requests.post(
                 url=server_url,
                 data={
@@ -255,13 +257,59 @@ try:
                 json_response = json.loads(response.content.decode(encoding))
                 if response.status_code < 300:
                     print(json_response["message"])
-                    print("RAW Response:")
-                    print(json.dumps(json_response, indent=3))
+                    # print("RAW Response:")
+                    # print(json.dumps(json_response, indent=3))
+                    folder_name = "message_attachments"
+                    try:
+                        os.mkdir(folder_name)
+                    except FileExistsError:
+                        pass
+                    for response_message in json_response["messages"]:
+                        print()
+                        print("From: " + response_message["fromUsername"])
+                        print("Sent: " + response_message["sentDateTime"])
+                        attached_files = ""
+                        try:
+                            os.mkdir(folder_name + "/" + str(str(response_message["messageID"])))
+                        except FileExistsError:
+                            pass
+                        for index, (response_file) in enumerate(response_message["fileList"]):
+                            attached_files += response_file["fileName"]
+                            if index < len(response_message["fileList"]) - 1:
+                                attached_files += ", "
+                            try:
+                                f = open(folder_name + "/" + str(response_message["messageID"]) + "/" + response_file["fileName"], "wb") ## use "xb" to prevent overwriting
+                                f.write(base64.b64decode(response_file["fileContent"]))
+                                f.close()
+                            except FileExistsError:
+                                logging.error("\"" + response_file["fileName"] + "\" already exists.")
+                        print("Files attached: " + ("none" if attached_files == "" else attached_files))
+                        print("Message: " + response_message["messageContent"])
+                        if response_message["messageRead"] == False:
+                            print()
+                            if prompt_yes_no("Do you want to mark this message as read?"):
+                                mark_as_read_response = requests.post(
+                                    url=server_url,
+                                    data={
+                                        "username": username,
+                                        "sessionID": sessionID,
+                                        "action": "MarkAsRead",
+                                        "messageID": response_message["messageID"],
+                                        "messageRead": str(True)
+                                    },
+                                    cert=(ssl_cert_file if ssl_enabled else None)
+                                )
+                                if not mark_as_read_response.status_code < 300:
+                                    print("Error marking as read.")
                 else:
                     logging.error(str(response.status_code) + " " + str(response.reason))
                     logging.error(json_response["errorMessage"])
-            except:
-                logging.error(str(response.status_code) + " " + str(response.reason))
+            except json.JSONDecodeError:
+                if response.status_code < 300:
+                    print(str(response.status_code) + " " + str(response.reason))
+                    print("Couldn't decode JSON.")
+                else:
+                    logging.error(str(response.status_code) + " " + str(response.reason))
 
         elif input_cmd == "help":
             print_help()

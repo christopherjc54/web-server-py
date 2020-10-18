@@ -73,6 +73,9 @@ Global.config.setdefault("miscellaneous", {
     "seaweedfs_address": "localhost",
     "seaweedfs_port": "9333"
 })
+Global.config.setdefault("log", {
+    "show_request_data": "false"
+})
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-c", "--config", metavar="filename",

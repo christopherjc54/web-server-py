@@ -40,6 +40,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             raise DatabaseConnectionLostException
 
     def get_request_parameters(self, getFormData=False):
+        show_request_data = Global.config.getboolean("log", "show_request_data")
         longest_width = 22
 
         if("?" in self.path):
@@ -50,12 +51,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             url_components = url_components.split("/")[1:-1]
         else:
             url_components = url_components.split("/")[1:]
-        logging.debug("URL path components: ".ljust(longest_width) + str(url_components))
+        if show_request_data:
+            logging.debug("URL path components: ".ljust(longest_width) + str(url_components))
         
         query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         for component in query_components:
             query_components.update({ component : query_components[component][0] })
-        logging.debug("URL query components: ".ljust(longest_width) + str(query_components))
+        if show_request_data:
+            logging.debug("URL query components: ".ljust(longest_width) + str(query_components))
         
         if getFormData:
             form = cgi.FieldStorage(
@@ -69,7 +72,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             form_data = dict()
             for item in form:
                 form_data.update({ item : form[item].value })
-            logging.debug("Form data: ".ljust(longest_width) + str(form_data))
+            if show_request_data:
+                logging.debug("Form data: ".ljust(longest_width) + str(form_data))
             return url_components, query_components, form_data
         else:
             return url_components, query_components
@@ -83,8 +87,6 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.check_db_connection()
         url_components, query_components, form_data = self.get_request_parameters(getFormData=True)
         self.handle_action("POST", url_components, query_components, form_data)
-
-    ## other do_HTTP_REQUEST_METHOD()s here
 
     def handle_action(self, method, url_components, query_components, form_data):
         if method == "POST":

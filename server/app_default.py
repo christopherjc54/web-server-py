@@ -17,8 +17,7 @@ class AppRequestHandler:
         "Action",
     )
     
-    @staticmethod
-    def on_remove_user(username):
+    def on_remove_user(self, username):
         pass
 
     def handle_action(self, url_components, query_components, form_data, request):
