@@ -25,7 +25,6 @@ class MessengerApp(AppRequestHandler):
         "MarkAsRead"
     )
     file_server = None
-    file_prefix = "files/"
 
     def __init__(self):
         logging.getLogger("urllib3").setLevel(logging.WARNING) ## suppress "pyseaweed" module's logging
@@ -33,8 +32,9 @@ class MessengerApp(AppRequestHandler):
             master_addr=Global.config.get("miscellaneous", "seaweedfs_address"),
             master_port=Global.config.getint("miscellaneous", "seaweedfs_port"),
             use_session=False,
-            use_public_url=True
+            use_public_url=False
         )
+        self.delete_orphan_messages()
 
     def on_remove_user(self, username):
         try:
@@ -51,57 +51,57 @@ class MessengerApp(AppRequestHandler):
             Global.db.rollback()
             raise Exception(e.msg)
         self.delete_orphan_messages()
-    
+
     def delete_orphan_messages(self):
-        logging.info("Deleting orphan messages...")
         try:
             Global.cursor.execute(
                 """
                     SELECT m.id
                     FROM Message m
-                    JOIN SentItem s ON m.id = s.messageID
-                    LEFT JOIN Account a ON s.fromUsername = a.username
-                    WHERE a.username = NULL
-                    UNION
-                    SELECT m.id
-                    FROM Message m
-                    JOIN Inbox i ON m.id = i.messageID
-                    LEFT JOIN Account a ON i.toUsername = a.username
-                    WHERE a.username = NULL
-                    ORDER BY m.id;
+                    WHERE NOT EXISTS (
+                        SELECT TRUE
+                        FROM SentItem s
+                        WHERE m.id = s.messageID
+                    ) AND NOT EXISTS (
+                        SELECT TRUE
+                        FROM Inbox i
+                        WHERE m.id = i.messageID
+                    )
+                    ORDER BY id;
                 """
             )
             message_result = Global.cursor.fetchall()
+            print(message_result)
             for db_messageID in message_result:
                 Global.cursor.execute(
                     "SELECT id, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
-                    (db_messageID,)
+                    (db_messageID[0],)
                 )
                 file_result = Global.cursor.fetchall()
+                print(file_result)
                 for db_fileID, db_remoteFileID in file_result:
-                    if self.file_server.file_exists(db_remoteFileID):
-                        if self.file_server.delete_file(db_remoteFileID):
-                            self.file_server.vacuum()
-                            Global.cursor.execute(
-                                "DELETE FROM File WHERE id = %s;",
-                                (db_fileID,)
-                            )
-                        else:
-                            logging.critical("Error deleting remote orphan file.")
-                            raise mysql.connector.Error
+                    if self.file_server.delete_file(db_remoteFileID):
+                        self.file_server.vacuum()
+                        Global.cursor.execute(
+                            "DELETE FROM File WHERE id = %s;",
+                            (db_fileID,)
+                        )
                     else:
-                        logging.critical("Remote orphan file doesn't exist.")
+                        logging.error("Error deleting remote orphan file.")
                         raise mysql.connector.Error
                 Global.cursor.execute(
                     "DELETE FROM Message WHERE id = %s;",
-                    (db_messageID,)
+                    (db_messageID[0],)
                 )
             Global.db.commit()
+            if len(message_result) > 0:
+                logging.info("Deleted orphan message" + ("s" if len(message_result) > 1 else "") + ".")
         except mysql.connector.Error as e:
             Global.db.rollback()
-            logging.error("Error deleting orphan messages.")
-            raise Exception(e.msg)
-    
+            if "Unknown error" not in e.msg:
+                logging.error(e.msg)
+            logging.error("Error deleting orphan message(s).")
+
     @staticmethod
     def get_bool(input):
         if input.lower() == "true" or input == "1":
@@ -132,7 +132,7 @@ class MessengerApp(AppRequestHandler):
                     "message": "default message action"
                 })
                 request.wfile.write(bytes(json_response, Global.encoding))
-            
+
             elif form_data.get("action") == "SendMessage":
                 if (
                     form_data.get("recipients") == None or
@@ -141,7 +141,7 @@ class MessengerApp(AppRequestHandler):
                     form_data.get("fileContent") == None
                 ):
                     raise MissingHeaderException
-                
+
                 try:
                     Global.cursor.execute(
                         "INSERT INTO Message (messageContent) VALUES (%s);",
@@ -177,6 +177,7 @@ class MessengerApp(AppRequestHandler):
                         file_id = None
                         try:
                             file_id = self.file_server.upload_file(stream=base64.b64decode(file_content[file_name]), name=file_name)
+                            logging.info("Successfully uploaded file.")
                         except requests.exceptions.ConnectionError:
                             logging.error("Failed to connect to file server.")
                         if file_id is None:
@@ -186,6 +187,7 @@ class MessengerApp(AppRequestHandler):
                             "INSERT INTO File (messageID, fileName, remoteFileID) VALUES (%s, %s, %s);",
                             (message_id, file_name, file_id)
                         )
+                    del file_content
                     Global.db.commit()
                     request.send_response_only(200) ## OK
                     request.end_headers()
@@ -201,10 +203,10 @@ class MessengerApp(AppRequestHandler):
                         logging.error(e)
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
-            
+
             elif form_data.get("action") == "DeleteMessage":
                 raise NotImplementedError
-            
+
             elif form_data.get("action") == "GetMessages":
                 if form_data.get("getFileContent") == None or form_data.get("getOneMessage") == None:
                     raise MissingHeaderException
@@ -260,20 +262,23 @@ class MessengerApp(AppRequestHandler):
                             "messageRead": db_messageRead,
                             "fileList": file_list
                         })
+                        del file_list
                     request.send_response_only(200) ## OK
                     request.end_headers()
                     json_response = json.dumps({
                         "message": "successfully retrieved message" + ("s" if not get_one_message else ""),
                         "messages": message_list
                     })
+                    del message_list
                     request.wfile.write(bytes(json_response, Global.encoding))
+                    del json_response
                 except mysql.connector.Error as e:
                     logging.error("Error getting message" + ("s" if not get_one_message else "") + ".")
                     if "Unknown error" not in e.msg:
                         logging.error(e)
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
-            
+
             elif form_data.get("action") == "MarkAsRead":
                 if form_data.get("messageID") == None or form_data.get("messageRead") == None:
                     raise MissingHeaderException
@@ -295,12 +300,12 @@ class MessengerApp(AppRequestHandler):
                     logging.error("Error marking message as " + ("read" if message_read else "unread") + ".")
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
-        
+
         except BooleanTypeError:
             logging.error("BooleanTypeError occured.")
             request.send_response_only(400) ## Bad Request
             request.end_headers()
-        
+
         except NotImplementedError:
             request.send_response_only(501) ## Not Implemented
             request.end_headers()
@@ -308,3 +313,5 @@ class MessengerApp(AppRequestHandler):
                 "errorMessage": "coming to a server near you!"
             })
             request.wfile.write(bytes(json_response, Global.encoding))
+
+        del form_data

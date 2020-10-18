@@ -3,8 +3,7 @@
 USE `DatabaseServer`;
 
 DROP TABLE IF EXISTS `Message`;
-CREATE TABLE `Message` (                        -- doesn't have foreign keys on usernames because messages still exist after user is deleted
-                                                -- should probably check for orphan messages when deleting a user (also prevents creating new account to view old messages)
+CREATE TABLE `Message` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `sentDateTime` DATETIME DEFAULT NOW(),
     `messageContent` VARCHAR(500),

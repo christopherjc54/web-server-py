@@ -288,19 +288,23 @@ try:
                         if response_message["messageRead"] == False:
                             print()
                             if prompt_yes_no("Do you want to mark this message as read?"):
-                                mark_as_read_response = requests.post(
-                                    url=server_url,
-                                    data={
-                                        "username": username,
-                                        "sessionID": sessionID,
-                                        "action": "MarkAsRead",
-                                        "messageID": response_message["messageID"],
-                                        "messageRead": str(True)
-                                    },
-                                    cert=(ssl_cert_file if ssl_enabled else None)
-                                )
-                                if not mark_as_read_response.status_code < 300:
-                                    print("Error marking as read.")
+                                while True:
+                                    mark_as_read_response = requests.post(
+                                        url=server_url,
+                                        data={
+                                            "username": username,
+                                            "sessionID": sessionID,
+                                            "action": "MarkAsRead",
+                                            "messageID": response_message["messageID"],
+                                            "messageRead": str(True)
+                                        },
+                                        cert=(ssl_cert_file if ssl_enabled else None)
+                                    )
+                                    if not mark_as_read_response.status_code < 300:
+                                        print("Error marking as read.")
+                                        if prompt_yes_no("Try again?"):
+                                            continue
+                                    break
                 else:
                     logging.error(str(response.status_code) + " " + str(response.reason))
                     logging.error(json_response["errorMessage"])

@@ -106,11 +106,11 @@ else:
 
 ## setup everything else
 handler_class = locate(Global.config.get("app_request_handler", "module_name") + "." + Global.config.get("app_request_handler", "class_name"))
-Global.app_handler = handler_class()
 Database.connect()
 if not (Global.db and Global.cursor):
     exit(-1)
 Session.delete_all_expired()
+Global.app_handler = handler_class()
 
 ## test code
 if Global.config.getboolean("server", "run_tests_on_startup"):

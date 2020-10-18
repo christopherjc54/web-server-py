@@ -53,13 +53,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             url_components = url_components.split("/")[1:]
         if show_request_data:
             logging.debug("URL path components: ".ljust(longest_width) + str(url_components))
-        
+
         query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         for component in query_components:
             query_components.update({ component : query_components[component][0] })
         if show_request_data:
             logging.debug("URL query components: ".ljust(longest_width) + str(query_components))
-        
+
         if getFormData:
             form = cgi.FieldStorage(
                 fp = self.rfile,
@@ -200,7 +200,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         "errorMessage": "valid sessionID not provided"
                     })
                     self.wfile.write(bytes(json_response, Global.encoding))
-        
+
             except MissingHeaderException:
                 logging.info("Request was missing headers.")
                 self.send_response_only(400) ## Bad Request
