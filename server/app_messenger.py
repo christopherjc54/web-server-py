@@ -20,9 +20,9 @@ class MessengerApp(AppRequestHandler):
     possible_actions = (
         "Action",
         "SendMessage",
-        "DeleteMessage",
         "GetMessages",
-        "MarkAsRead"
+        "MarkAsRead",
+        "DeleteMessage"
     )
     file_server = None
 
@@ -146,7 +146,8 @@ class MessengerApp(AppRequestHandler):
                         (form_data.get("messageContent"),)
                     )
                     message_id = Global.cursor.lastrowid
-                    for recipient in json.loads(form_data.get("recipients")):
+                    recipients = json.loads(form_data.get("recipients"))
+                    for recipient in [ele for index, ele in enumerate(recipients) if ele not in recipients[:index]]:
                         Global.cursor.execute(
                             "SELECT TRUE FROM Account WHERE username = %s;",
                             (recipient,)
@@ -202,53 +203,6 @@ class MessengerApp(AppRequestHandler):
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
                 del form_data
-
-            elif form_data.get("action") == "DeleteMessage":
-                if form_data.get("messageID") == None or form_data.get("mailboxType") == None:
-                    raise MissingHeaderException
-
-                try:
-                    if form_data.get("mailboxType") == "Sent":
-                        check_query = "SELECT TRUE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
-                        delete_query = "DELETE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
-                    elif form_data.get("mailboxType") == "Inbox":
-                        check_query = "SELECT TRUE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
-                        delete_query = "DELETE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
-                    else:
-                        request.send_response_only(400) ## Bad Request
-                        request.end_headers()
-                        json_response = json.dumps({
-                            "errorMessage": "invalid mailbox"
-                        })
-                        request.wfile.write(bytes(json_response, Global.encoding))
-                        return
-                    Global.cursor.execute(
-                        check_query,
-                        (form_data.get("username"), form_data.get("messageID"))
-                    )
-                    if len(Global.cursor.fetchall()) != 1:
-                        request.send_response_only(400) ## Bad Request
-                        request.end_headers()
-                        json_response = json.dumps({
-                            "errorMessage": "message not found"
-                        })
-                        request.wfile.write(bytes(json_response, Global.encoding))
-                        return
-                    Global.cursor.execute(
-                        delete_query,
-                        (form_data.get("username"), form_data.get("messageID"))
-                    )
-                    self.delete_orphan_messages()
-                    request.send_response_only(200) ## OK
-                    request.end_headers()
-                    json_response = json.dumps({
-                        "message": "successfully deleted message"
-                    })
-                    request.wfile.write(bytes(json_response, Global.encoding))
-                except mysql.connector.Error:
-                    logging.error("Error deleting message.")
-                    request.send_response_only(500) ## Internal Server Error
-                    request.end_headers()
 
             elif form_data.get("action") == "GetMessages":
                 if form_data.get("getFileContent") == None or form_data.get("getOneMessage") == None:
@@ -341,6 +295,53 @@ class MessengerApp(AppRequestHandler):
                 except mysql.connector.Error as e:
                     logging.error(e.msg)
                     logging.error("Error marking message as " + ("read" if message_read else "unread") + ".")
+                    request.send_response_only(500) ## Internal Server Error
+                    request.end_headers()
+
+            elif form_data.get("action") == "DeleteMessage":
+                if form_data.get("messageID") == None or form_data.get("mailboxType") == None:
+                    raise MissingHeaderException
+
+                try:
+                    if form_data.get("mailboxType") == "Sent":
+                        check_query = "SELECT TRUE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
+                        delete_query = "DELETE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
+                    elif form_data.get("mailboxType") == "Inbox":
+                        check_query = "SELECT TRUE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
+                        delete_query = "DELETE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
+                    else:
+                        request.send_response_only(400) ## Bad Request
+                        request.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "invalid mailbox"
+                        })
+                        request.wfile.write(bytes(json_response, Global.encoding))
+                        return
+                    Global.cursor.execute(
+                        check_query,
+                        (form_data.get("username"), form_data.get("messageID"))
+                    )
+                    if len(Global.cursor.fetchall()) != 1:
+                        request.send_response_only(400) ## Bad Request
+                        request.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "message not found"
+                        })
+                        request.wfile.write(bytes(json_response, Global.encoding))
+                        return
+                    Global.cursor.execute(
+                        delete_query,
+                        (form_data.get("username"), form_data.get("messageID"))
+                    )
+                    self.delete_orphan_messages()
+                    request.send_response_only(200) ## OK
+                    request.end_headers()
+                    json_response = json.dumps({
+                        "message": "successfully deleted message"
+                    })
+                    request.wfile.write(bytes(json_response, Global.encoding))
+                except mysql.connector.Error:
+                    logging.error("Error deleting message.")
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
 

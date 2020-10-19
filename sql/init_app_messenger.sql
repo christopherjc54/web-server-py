@@ -1,4 +1,4 @@
--- configure "Messenger" application database tables after logging in as "user"
+-- configure "Messenger" application database after logging in as "user"
 
 USE `DatabaseServer`;
 
