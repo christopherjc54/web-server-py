@@ -39,7 +39,7 @@ class MessengerApp(AppRequestHandler):
     def on_remove_user(self, username):
         try:
             Global.cursor.execute(
-                "DELETE FROM SentItem WHERE fromUsername = %s;",
+                "DELETE FROM Sent WHERE fromUsername = %s;",
                 (username,)
             )
             Global.cursor.execute(
@@ -60,7 +60,7 @@ class MessengerApp(AppRequestHandler):
                     FROM Message m
                     WHERE NOT EXISTS (
                         SELECT TRUE
-                        FROM SentItem s
+                        FROM Sent s
                         WHERE m.id = s.messageID
                     ) AND NOT EXISTS (
                         SELECT TRUE
@@ -71,17 +71,14 @@ class MessengerApp(AppRequestHandler):
                 """
             )
             message_result = Global.cursor.fetchall()
-            print(message_result)
             for db_messageID in message_result:
                 Global.cursor.execute(
                     "SELECT id, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
                     (db_messageID[0],)
                 )
                 file_result = Global.cursor.fetchall()
-                print(file_result)
                 for db_fileID, db_remoteFileID in file_result:
                     if self.file_server.delete_file(db_remoteFileID):
-                        self.file_server.vacuum()
                         Global.cursor.execute(
                             "DELETE FROM File WHERE id = %s;",
                             (db_fileID,)
@@ -93,6 +90,7 @@ class MessengerApp(AppRequestHandler):
                     "DELETE FROM Message WHERE id = %s;",
                     (db_messageID[0],)
                 )
+            self.file_server.vacuum()
             Global.db.commit()
             if len(message_result) > 0:
                 logging.info("Deleted orphan message" + ("s" if len(message_result) > 1 else "") + ".")
@@ -164,7 +162,7 @@ class MessengerApp(AppRequestHandler):
                             request.wfile.write(bytes(json_response, Global.encoding))
                             return
                         Global.cursor.execute(
-                            "INSERT INTO SentItem (fromUsername, toUsername, messageID) VALUES (%s, %s, %s);",
+                            "INSERT INTO Sent (fromUsername, toUsername, messageID) VALUES (%s, %s, %s);",
                             (form_data.get("username"), recipient, message_id)
                         )
                         Global.cursor.execute(
@@ -203,9 +201,54 @@ class MessengerApp(AppRequestHandler):
                         logging.error(e)
                     request.send_response_only(500) ## Internal Server Error
                     request.end_headers()
+                del form_data
 
             elif form_data.get("action") == "DeleteMessage":
-                raise NotImplementedError
+                if form_data.get("messageID") == None or form_data.get("mailboxType") == None:
+                    raise MissingHeaderException
+
+                try:
+                    if form_data.get("mailboxType") == "Sent":
+                        check_query = "SELECT TRUE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
+                        delete_query = "DELETE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
+                    elif form_data.get("mailboxType") == "Inbox":
+                        check_query = "SELECT TRUE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
+                        delete_query = "DELETE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
+                    else:
+                        request.send_response_only(400) ## Bad Request
+                        request.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "invalid mailbox"
+                        })
+                        request.wfile.write(bytes(json_response, Global.encoding))
+                        return
+                    Global.cursor.execute(
+                        check_query,
+                        (form_data.get("username"), form_data.get("messageID"))
+                    )
+                    if len(Global.cursor.fetchall()) != 1:
+                        request.send_response_only(400) ## Bad Request
+                        request.end_headers()
+                        json_response = json.dumps({
+                            "errorMessage": "message not found"
+                        })
+                        request.wfile.write(bytes(json_response, Global.encoding))
+                        return
+                    Global.cursor.execute(
+                        delete_query,
+                        (form_data.get("username"), form_data.get("messageID"))
+                    )
+                    self.delete_orphan_messages()
+                    request.send_response_only(200) ## OK
+                    request.end_headers()
+                    json_response = json.dumps({
+                        "message": "successfully deleted message"
+                    })
+                    request.wfile.write(bytes(json_response, Global.encoding))
+                except mysql.connector.Error:
+                    logging.error("Error deleting message.")
+                    request.send_response_only(500) ## Internal Server Error
+                    request.end_headers()
 
             elif form_data.get("action") == "GetMessages":
                 if form_data.get("getFileContent") == None or form_data.get("getOneMessage") == None:
@@ -313,5 +356,3 @@ class MessengerApp(AppRequestHandler):
                 "errorMessage": "coming to a server near you!"
             })
             request.wfile.write(bytes(json_response, Global.encoding))
-
-        del form_data

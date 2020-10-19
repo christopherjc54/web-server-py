@@ -20,11 +20,10 @@ class Account:
 
     def add(username, original_password, display_name, plain_text=True):
         Global.cursor.execute(
-            "SELECT * FROM Account WHERE username = %s",
+            "SELECT TRUE FROM Account WHERE username = %s",
             (username,)
         )
-        result = Global.cursor.fetchall()
-        if len(result) > 0:
+        if len(Global.cursor.fetchall()) > 0:
             error_message = "user \"" + username + "\" already exists"
             logging.error(error_message)
             return False, error_message

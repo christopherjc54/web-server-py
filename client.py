@@ -29,6 +29,7 @@ commands = (
     "DeleteAccount",
     "SendMessage",
     "GetMessages",
+    "DeleteMessage",
     "help",
     "exit"
 )
@@ -260,29 +261,33 @@ try:
                     # print("RAW Response:")
                     # print(json.dumps(json_response, indent=3))
                     folder_name = "message_attachments"
-                    try:
-                        os.mkdir(folder_name)
-                    except FileExistsError:
-                        pass
+                    if get_file_content:
+                        try:
+                            os.mkdir(folder_name)
+                        except FileExistsError:
+                            pass
                     for response_message in json_response["messages"]:
                         print()
+                        print("ID: " + str(response_message["messageID"]))
                         print("From: " + response_message["fromUsername"])
                         print("Sent: " + response_message["sentDateTime"])
                         attached_files = ""
-                        try:
-                            os.mkdir(folder_name + "/" + str(str(response_message["messageID"])))
-                        except FileExistsError:
-                            pass
+                        if get_file_content:
+                            try:
+                                os.mkdir(folder_name + "/" + str(str(response_message["messageID"])))
+                            except FileExistsError:
+                                pass
                         for index, (response_file) in enumerate(response_message["fileList"]):
                             attached_files += response_file["fileName"]
                             if index < len(response_message["fileList"]) - 1:
                                 attached_files += ", "
-                            try:
-                                f = open(folder_name + "/" + str(response_message["messageID"]) + "/" + response_file["fileName"], "wb") ## use "xb" to prevent overwriting
-                                f.write(base64.b64decode(response_file["fileContent"]))
-                                f.close()
-                            except FileExistsError:
-                                logging.error("\"" + response_file["fileName"] + "\" already exists.")
+                            if get_file_content:
+                                try:
+                                    f = open(folder_name + "/" + str(response_message["messageID"]) + "/" + response_file["fileName"], "wb") ## use "xb" to prevent overwriting
+                                    f.write(base64.b64decode(response_file["fileContent"]))
+                                    f.close()
+                                except FileExistsError:
+                                    logging.error("\"" + response_file["fileName"] + "\" already exists.")
                         print("Files attached: " + ("none" if attached_files == "" else attached_files))
                         print("Message: " + response_message["messageContent"])
                         if response_message["messageRead"] == False:
@@ -315,6 +320,29 @@ try:
                 else:
                     logging.error(str(response.status_code) + " " + str(response.reason))
 
+        elif input_cmd == "DeleteMessage":
+            message_id = input("Enter message ID: ")
+            response = requests.post(
+                url=server_url,
+                data={
+                    "username": username,
+                    "sessionID": sessionID,
+                    "action": input_cmd,
+                    "mailboxType": "Inbox",
+                    "messageID": message_id
+                },
+                cert=(ssl_cert_file if ssl_enabled else None)
+            )
+            try:
+                json_response = json.loads(response.content.decode(encoding))
+                if response.status_code < 300:
+                    print(json_response["message"])
+                else:
+                    logging.error(str(response.status_code) + " " + str(response.reason))
+                    logging.error(json_response["errorMessage"])
+            except:
+                logging.error(str(response.status_code) + " " + str(response.reason))
+        
         elif input_cmd == "help":
             print_help()
         

@@ -1,4 +1,4 @@
--- configure "Messenger" application database tables and procedures after logging in as "user"
+-- configure "Messenger" application database tables after logging in as "user"
 
 USE `DatabaseServer`;
 
@@ -11,8 +11,8 @@ CREATE TABLE `Message` (
     UNIQUE (`id`)
 );
 
-DROP TABLE IF EXISTS `SentItem`;
-CREATE TABLE `SentItem` (
+DROP TABLE IF EXISTS `Sent`;
+CREATE TABLE `Sent` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `fromUsername` VARCHAR(15),
     `toUsername` VARCHAR(15),
