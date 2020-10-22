@@ -1,11 +1,11 @@
-# Python HTTPS API for Database Server
+# Python HTTPS API Server
 
-The purpose of this project is to create a fully functional interface for secure networked application development.
+The purpose of this project is to create a fully functional interface for secured network application development.
 
 A sample client is provided to test functionality.
 
 ## GET Request ##
-Any GET request will return a list of all usernames and passwords in the form they were initially sent to the server. This will change.
+Any GET request will return a printout of all usernames and display names. This will change.
 
 ## POST Request form-data Keys ##
 - action
@@ -66,3 +66,96 @@ Any GET request will return a list of all usernames and passwords in the form th
   - [message]
 - on failure:
   - [errorMessage]
+
+## Messenger POST Request form-data Keys
+- [messageID]
+  - required for ```SendMessage```, ```GetMessages```, ```MarkAsRead```, and ```DeleteMessage```
+- [recipients]
+  - required for ```SendMessage```
+  - JSON list of usernames
+- [messageContent]
+  - required for ```SendMessage```
+  - max size: 500 characters
+- [uploadedFiles]
+  - required for ```SendMessage```
+  - JSON list of file names
+  - should correlate with fileContent
+- [fileContent]
+  - required for ```SendMessage```
+  - JSON dictionary of file names and base64-encoded file content
+- [getOneMessage]
+  - required for ```GetMessages```
+  - "true"/"1" or "false"/"0"
+- [getOnlyNewMessages]
+  - required for ```GetMessages```
+  - "true"/"1" or "false"/"0"
+- [getFileContent]
+  - required for ```GetMessages```
+  - "true"/"1" or "false"/"0"
+  - fileContent will be null if false
+- [messageRead]
+  - required for ```MarkAsRead```
+  - "true"/"1" or "false"/"0"
+- [mailboxType]
+  - required for ```DeleteMessage```
+  - "Inbox" or "Sent"
+
+## Messenger Actions ##
+- ```Action```
+  - test action to verify custom app loading works
+  - POST form-data keys:
+    - action
+    - username
+    - sessionID
+- ```SendMessage```
+  - sends a message with zero to many file attachments to one or more recipients
+  - POST form-data keys:
+    - action
+    - username
+    - sessionID
+    - recipients
+    - messageContent
+    - uploadedFiles
+    - fileContent
+  - Non-Standard JSON Response
+    - messageID
+- ```GetMessages```
+  - retrieves one message, all unread messages, or all messages with optional file attachment download
+  - POST form-data keys:
+    - action
+    - username
+    - sessionID
+    - getFileContent
+    - getOneMessage
+    - [messageID]
+      - include if getOneMessage is true
+    - [getOnlyNewMessages]
+      - include if getOneMessage if false
+  - Non-Standard JSON Response
+    - messages => JSON list of message dictionaries
+      - messageID
+      - fromUsername
+      - messageContent
+      - sentDateTime
+      - messageRead
+      - fileList => JSON list of file dictionaries
+        - fileID
+        - fileName
+        - fileContent
+          - base64-encoded file content
+- ```MarkAsRead```
+  - Marks a message as read or unread.
+  - POST form-data keys:
+    - action
+    - username
+    - sessionID
+    - messageID
+    - messageRead
+- ```DeleteMessage```
+  - Deletes a message from specified mailbox.
+  - POST form-data keys:
+    - action
+    - username
+    - sessionID
+    - messageID
+    - mailboxType

@@ -34,7 +34,6 @@ class MessengerApp(AppRequestHandler):
             use_session=False,
             use_public_url=False
         )
-        self.delete_orphan_messages()
 
     def on_remove_user(self, username):
         try:
@@ -47,10 +46,10 @@ class MessengerApp(AppRequestHandler):
                 (username,)
             )
             Global.db.commit()
+            self.delete_orphan_messages()
         except mysql.connector.Error as e:
             Global.db.rollback()
             raise Exception(e.msg)
-        self.delete_orphan_messages()
 
     def delete_orphan_messages(self):
         try:
@@ -176,12 +175,12 @@ class MessengerApp(AppRequestHandler):
                         file_id = None
                         try:
                             file_id = self.file_server.upload_file(stream=base64.b64decode(file_content[file_name]), name=file_name)
-                            logging.info("Successfully uploaded file.")
                         except requests.exceptions.ConnectionError:
                             logging.error("Failed to connect to file server.")
                         if file_id is None:
                             logging.error("Failed to upload \"" + file_name + "\".")
                             raise mysql.connector.Error
+                        logging.info("Successfully uploaded file.")
                         Global.cursor.execute(
                             "INSERT INTO File (messageID, fileName, remoteFileID) VALUES (%s, %s, %s);",
                             (message_id, file_name, file_id)
@@ -207,9 +206,8 @@ class MessengerApp(AppRequestHandler):
             elif form_data.get("action") == "GetMessages":
                 if form_data.get("getFileContent") == None or form_data.get("getOneMessage") == None:
                     raise MissingHeaderException
-                else:
-                    get_file_content = self.get_bool(form_data.get("getFileContent"))
-                    get_one_message = self.get_bool(form_data.get("getOneMessage"))
+                get_file_content = self.get_bool(form_data.get("getFileContent"))
+                get_one_message = self.get_bool(form_data.get("getOneMessage"))
                 get_only_new_messages = False
                 if get_one_message:
                     if form_data.get("messageID") == None:
@@ -217,8 +215,7 @@ class MessengerApp(AppRequestHandler):
                 else:
                     if form_data.get("getOnlyNewMessages") == None:
                         raise MissingHeaderException
-                    else:
-                        get_only_new_messages = self.get_bool(form_data.get("getOnlyNewMessages"))
+                    get_only_new_messages = self.get_bool(form_data.get("getOnlyNewMessages"))
 
                 try:
                     Global.cursor.execute(
@@ -321,7 +318,7 @@ class MessengerApp(AppRequestHandler):
                         check_query,
                         (form_data.get("username"), form_data.get("messageID"))
                     )
-                    if len(Global.cursor.fetchall()) != 1:
+                    if len(Global.cursor.fetchall()) == 0:
                         request.send_response_only(400) ## Bad Request
                         request.end_headers()
                         json_response = json.dumps({
