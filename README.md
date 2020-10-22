@@ -1,6 +1,6 @@
 # Python HTTPS API Server
 
-The purpose of this project is to create a fully functional interface for secured network application development.
+The purpose of this project is to create a fully functional interface for secure network application development.
 
 A sample client is provided to test functionality.
 
@@ -69,7 +69,7 @@ Any GET request will return a printout of all usernames and display names. This 
 
 ## Messenger POST Request form-data Keys
 - [messageID]
-  - required for ```SendMessage```, ```GetMessages```, ```MarkAsRead```, and ```DeleteMessage```
+  - required for ```GetMessages```, ```MarkAsRead```, and ```DeleteMessage```
 - [recipients]
   - required for ```SendMessage```
   - JSON list of usernames
