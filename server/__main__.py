@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from http.server import ThreadingHTTPServer
+from http.server import HTTPServer
 from pydoc import locate
 import ssl
 import hashlib
@@ -127,7 +127,7 @@ if Global.config.getboolean("server", "run_tests_on_startup"):
 httpd = None
 ssl_enabled = Global.config.getboolean("server", "ssl_enabled")
 try:
-    httpd = ThreadingHTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), RequestHandler)
+    httpd = HTTPServer((Global.config.get("server", "address"), Global.config.getint("server", "port")), RequestHandler)
     if ssl_enabled:
         httpd.socket = ssl.wrap_socket(
             httpd.socket,
