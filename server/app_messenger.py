@@ -37,6 +37,7 @@ class MessengerApp(AppRequestHandler):
 
     def on_remove_user(self, username):
         try:
+            Global.cursor.start_transaction()
             Global.cursor.execute(
                 "DELETE FROM Sent WHERE fromUsername = %s;",
                 (username,)
@@ -52,52 +53,62 @@ class MessengerApp(AppRequestHandler):
             raise Exception(e.msg)
 
     def delete_orphan_messages(self):
-        try:
-            Global.cursor.execute(
-                """
-                    SELECT m.id
-                    FROM Message m
-                    WHERE NOT EXISTS (
-                        SELECT TRUE
-                        FROM Sent s
-                        WHERE m.id = s.messageID
-                    ) AND NOT EXISTS (
-                        SELECT TRUE
-                        FROM Inbox i
-                        WHERE m.id = i.messageID
-                    )
-                    ORDER BY id;
-                """
-            )
-            message_result = Global.cursor.fetchall()
-            for db_messageID in message_result:
+        Global.cursor.execute(
+            """
+                SELECT m.id
+                FROM Message m
+                WHERE NOT EXISTS (
+                    SELECT TRUE
+                    FROM Sent s
+                    WHERE m.id = s.messageID
+                ) AND NOT EXISTS (
+                    SELECT TRUE
+                    FROM Inbox i
+                    WHERE m.id = i.messageID
+                )
+                ORDER BY id;
+            """
+        )
+        orphan_message_result = Global.cursor.fetchall()
+        deleted_message_count = 0
+        for db_messageID in orphan_message_result:
+            try:
+                Global.cursor.start_transaction()
                 Global.cursor.execute(
                     "SELECT id, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
                     (db_messageID[0],)
                 )
                 file_result = Global.cursor.fetchall()
                 for db_fileID, db_remoteFileID in file_result:
+                    if not self.file_server.file_exists(db_remoteFileID):
+                        logging.error("Orphan file doesn't exist.")
+                        raise mysql.connector.Error
+                for db_fileID, db_remoteFileID in file_result:
                     if self.file_server.delete_file(db_remoteFileID):
                         Global.cursor.execute(
                             "DELETE FROM File WHERE id = %s;",
                             (db_fileID,)
                         )
-                    else:
+                    else: ## this error will result in a corrupt state, but is not likely
                         logging.error("Error deleting remote orphan file.")
                         raise mysql.connector.Error
                 Global.cursor.execute(
                     "DELETE FROM Message WHERE id = %s;",
                     (db_messageID[0],)
                 )
-            self.file_server.vacuum()
-            Global.db.commit()
-            if len(message_result) > 0:
-                logging.info("Deleted orphan message" + ("s" if len(message_result) > 1 else "") + ".")
-        except mysql.connector.Error as e:
-            Global.db.rollback()
-            if "Unknown error" not in e.msg:
-                logging.error(e.msg)
-            logging.error("Error deleting orphan message(s).")
+                Global.db.commit()
+                deleted_message_count += 1
+            except mysql.connector.Error as e:
+                Global.db.rollback()
+                if "Unknown error" not in e.msg:
+                    logging.error(e.msg)
+                logging.error("Error deleting orphan message with ID " + db_messageID + ".")
+        self.file_server.vacuum()
+        if deleted_message_count == len(orphan_message_result):
+            logging.info("Successfully deleted all orphan message" + ("s" if len(orphan_message_result) > 1 else "") + ".")
+        else:
+            logging.info("Deleted " + deleted_message_count + "/" + (len(orphan_message_result) - deleted_message_count) + " orphan message" + ("s" if len(orphan_message_result) > 1 else "") + ".")
+
 
     @staticmethod
     def get_bool(input):
@@ -140,6 +151,7 @@ class MessengerApp(AppRequestHandler):
                     raise MissingHeaderException
 
                 try:
+                    Global.cursor.start_transaction()
                     Global.cursor.execute(
                         "INSERT INTO Message (messageContent) VALUES (%s);",
                         (form_data.get("messageContent"),)
@@ -301,10 +313,8 @@ class MessengerApp(AppRequestHandler):
 
                 try:
                     if form_data.get("mailboxType") == "Sent":
-                        check_query = "SELECT TRUE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
                         delete_query = "DELETE FROM Sent WHERE fromUsername = %s AND messageID = %s;"
                     elif form_data.get("mailboxType") == "Inbox":
-                        check_query = "SELECT TRUE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
                         delete_query = "DELETE FROM Inbox WHERE toUsername = %s AND messageID = %s;"
                     else:
                         request.send_response_only(400) ## Bad Request
@@ -315,10 +325,10 @@ class MessengerApp(AppRequestHandler):
                         request.wfile.write(bytes(json_response, Global.encoding))
                         return
                     Global.cursor.execute(
-                        check_query,
+                        delete_query,
                         (form_data.get("username"), form_data.get("messageID"))
                     )
-                    if len(Global.cursor.fetchall()) == 0:
+                    if Global.cursor.rowcount == 0:
                         request.send_response_only(400) ## Bad Request
                         request.end_headers()
                         json_response = json.dumps({
@@ -326,10 +336,6 @@ class MessengerApp(AppRequestHandler):
                         })
                         request.wfile.write(bytes(json_response, Global.encoding))
                         return
-                    Global.cursor.execute(
-                        delete_query,
-                        (form_data.get("username"), form_data.get("messageID"))
-                    )
                     self.delete_orphan_messages()
                     request.send_response_only(200) ## OK
                     request.end_headers()

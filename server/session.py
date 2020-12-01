@@ -18,7 +18,6 @@ class Session:
                 "INSERT INTO Session (username, sessionID, expDateTime) VALUES (%s, %s, %s);",
                 (username, sessionID, expDateTime)
             )
-            Global.db.commit()
         except mysql.connector.errors.IntegrityError: ## used for duplicate key errors, foreign key constraint errors (n/a here), and data too long errors (n/a here)
             return "" ## session already exists
                       ## this error will only occur when Session("username") is set as primary key or unique
@@ -48,14 +47,12 @@ class Session:
             "UPDATE Session SET expDateTime = %s WHERE sessionID = %s;",
             (expDateTime, sessionID)
         )
-        Global.db.commit()
 
     def delete(sessionID):
         Global.cursor.execute(
             "DELETE FROM Session WHERE sessionID = %s;",
             (sessionID,)
         )
-        Global.db.commit()
 
     def delete_all_expired():
         Global.cursor.execute("SELECT username, sessionID, expDateTime FROM Session ORDER BY id;")

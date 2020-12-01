@@ -144,7 +144,7 @@ Any GET request will return a printout of all usernames and display names. This 
         - fileContent
           - base64-encoded file content
 - ```MarkAsRead```
-  - Marks a message as read or unread.
+  - marks a message as read or unread
   - POST form-data keys:
     - action
     - username
@@ -152,7 +152,7 @@ Any GET request will return a printout of all usernames and display names. This 
     - messageID
     - messageRead
 - ```DeleteMessage```
-  - Deletes a message from specified mailbox.
+  - deletes a message from specified mailbox
   - POST form-data keys:
     - action
     - username

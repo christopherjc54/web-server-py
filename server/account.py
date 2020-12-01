@@ -64,8 +64,8 @@ class Account:
             else:
                 logging.critical("Salt method is invalid.")
                 raise Exception
-            Global.db.commit() ## would need exception check and db.rollback() if one of many commits fail (ACID property)
         except mysql.connector.DataError as e:
+            ## db.rollback() if one of many commits fail (ACID property)
             assert "data too long" in e.msg.lower()
             error_message = "username must be 15 or less characters"
             logging.error(error_message)
@@ -88,6 +88,7 @@ class Account:
 
     def remove(username):
         try:
+            Global.cursor.start_transaction()
             Global.cursor.execute(
                 "DELETE FROM Session WHERE username = %s;",
                 (username,)
