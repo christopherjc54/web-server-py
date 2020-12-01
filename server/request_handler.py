@@ -5,7 +5,6 @@ import cgi
 import logging
 import json
 import urllib
-import os
 
 from __main__ import Global, Database
 from account import *
@@ -99,7 +98,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 for action in self.possible_action + Global.app_handler.possible_actions:
                     if form_data.get("action") == action:
                         is_valid_action = True
-                logging.info("Received " + ("valid" if is_valid_action else "invalid") + " \"" + form_data.get("action") + "\" request.")
+                logging.info("Received " + ("correctly" if is_valid_action else "incorrectly") + " formatted \"" + form_data.get("action") + "\" request.")
 
                 if(form_data.get("action") == "CreateAccountSecure" or form_data.get("action") == "CreateAccountInsecure"):
                     is_insecure = ("Insecure" in form_data.get("action"))

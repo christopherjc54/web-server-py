@@ -29,7 +29,8 @@ class Database:
                 host=Global.config.get("database", "address"),
                 user=Global.config.get("database", "username"),
                 password=Global.config.get("database", "password"),
-                database=Global.config.get("database", "name")
+                database=Global.config.get("database", "name"),
+                autocommit=True
             )
             Global.cursor = Global.db.cursor()
             logging.info("Connected to database.")

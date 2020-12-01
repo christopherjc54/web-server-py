@@ -37,7 +37,7 @@ class MessengerApp(AppRequestHandler):
 
     def on_remove_user(self, username):
         try:
-            Global.cursor.start_transaction()
+            Global.db.start_transaction()
             Global.cursor.execute(
                 "DELETE FROM Sent WHERE fromUsername = %s;",
                 (username,)
@@ -73,7 +73,7 @@ class MessengerApp(AppRequestHandler):
         deleted_message_count = 0
         for db_messageID in orphan_message_result:
             try:
-                Global.cursor.start_transaction()
+                Global.db.start_transaction()
                 Global.cursor.execute(
                     "SELECT id, remoteFileID FROM File WHERE messageID = %s ORDER BY id;",
                     (db_messageID[0],)
@@ -108,7 +108,6 @@ class MessengerApp(AppRequestHandler):
             logging.info("Successfully deleted all orphan message" + ("s" if len(orphan_message_result) > 1 else "") + ".")
         else:
             logging.info("Deleted " + deleted_message_count + "/" + (len(orphan_message_result) - deleted_message_count) + " orphan message" + ("s" if len(orphan_message_result) > 1 else "") + ".")
-
 
     @staticmethod
     def get_bool(input):
@@ -151,7 +150,7 @@ class MessengerApp(AppRequestHandler):
                     raise MissingHeaderException
 
                 try:
-                    Global.cursor.start_transaction()
+                    Global.db.start_transaction()
                     Global.cursor.execute(
                         "INSERT INTO Message (messageContent) VALUES (%s);",
                         (form_data.get("messageContent"),)

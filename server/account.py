@@ -88,7 +88,7 @@ class Account:
 
     def remove(username):
         try:
-            Global.cursor.start_transaction()
+            Global.db.start_transaction()
             Global.cursor.execute(
                 "DELETE FROM Session WHERE username = %s;",
                 (username,)
