@@ -91,14 +91,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         if method == "POST":
             try:
                 if form_data.get("username") == None or form_data.get("action") == None:
-                    logging.info("Received invalid request.")
                     raise MissingHeaderException
 
                 is_valid_action = False
                 for action in self.possible_action + Global.app_handler.possible_actions:
                     if form_data.get("action") == action:
                         is_valid_action = True
-                logging.info("Received " + ("correctly" if is_valid_action else "incorrectly") + " formatted \"" + form_data.get("action") + "\" request.")
+                logging.info("Received " + ("" if is_valid_action else "unsupported ") + "\"" + form_data.get("action") + "\" request.")
 
                 if(form_data.get("action") == "CreateAccountSecure" or form_data.get("action") == "CreateAccountInsecure"):
                     is_insecure = ("Insecure" in form_data.get("action"))
