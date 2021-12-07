@@ -18,7 +18,7 @@ class MissingHeaderException(Exception):
 
 class RequestHandler(BaseHTTPRequestHandler):
 
-    possible_action = (
+    possible_actions = (
         "CreateAccountSecure",
         "CreateAccountInsecure",
         "Login",
@@ -94,7 +94,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     raise MissingHeaderException
 
                 is_valid_action = False
-                for action in self.possible_action + Global.app_handler.possible_actions:
+                for action in self.possible_actions + Global.app_handler.possible_actions:
                     if form_data.get("action") == action:
                         is_valid_action = True
                 logging.info("Received " + ("" if is_valid_action else "unsupported ") + "\"" + form_data.get("action") + "\" request.")
@@ -210,9 +210,9 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         ## still need to do something with this, preferably not compromise the entire system XD
         elif method == "GET":
-            self.send_response_only(200) ## OK
+            self.send_response_only(501) ## Not Implemented
             self.end_headers()
-            self.wfile.write(bytes(Account.get_all_as_string(), Global.encoding))
+            # self.wfile.write(bytes(Account.get_all_as_string(), Global.encoding))
 
         else:
             self.send_response_only(501) ## Not Implemented

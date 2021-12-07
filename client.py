@@ -283,9 +283,9 @@ try:
                                 attached_files += ", "
                             if get_file_content:
                                 try:
-                                    f = open(folder_name + "/" + str(response_message["messageID"]) + "/" + response_file["fileName"], "wb") ## use "xb" to prevent overwriting
-                                    f.write(base64.b64decode(response_file["fileContent"]))
-                                    f.close()
+                                    file = open(folder_name + "/" + str(response_message["messageID"]) + "/" + response_file["fileName"], "wb") ## use "xb" to prevent overwriting
+                                    file.write(base64.b64decode(response_file["fileContent"]))
+                                    file.close()
                                 except FileExistsError:
                                     logging.error("\"" + response_file["fileName"] + "\" already exists.")
                         print("Files attached: " + ("none" if attached_files == "" else attached_files))
